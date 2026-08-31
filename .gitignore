@@ -1,0 +1,13 @@
+# ESP-IDF 构建产物
+firmware/build/
+firmware/sdkconfig
+
+# 前端构建产物（输出到固件目录，用于内嵌）
+firmware/web_dist/
+web/node_modules/
+
+# 编辑器/系统
+.vscode/
+.idea/
+*.swp
+Thumbs.db
