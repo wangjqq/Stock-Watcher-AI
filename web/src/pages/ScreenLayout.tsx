@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Button, Card, InputNumber, List, Space, Switch, message } from 'antd'
+import { Button, Card, Input, InputNumber, List, Select, Space, Switch, message } from 'antd'
 import { api } from '../api/client'
-import type { AppConfig, Widget } from '../types'
+import { fieldStore } from '../api/fieldStore'
+import type { AppConfig, FormatType, Widget } from '../types'
 import {
   CANVAS_HEIGHT,
   CANVAS_SCALE,
@@ -13,8 +14,52 @@ import {
 
 const s = CANVAS_SCALE
 
+/** 取某 widget 数据源里对应字段的示例值（用于实时预览） */
+function sampleOf(w: Widget): string | undefined {
+  return fieldStore.get(w.interface_id).find((f) => f.path === w.field_path)?.sample
+}
+
+/** 格式化类型选项（与固件 formatter.h 的 format_type_t 对应） */
+const FORMAT_OPTIONS = [
+  { value: 0, label: '原样' },
+  { value: 1, label: '百分比 %' },
+  { value: 2, label: '小数位' },
+]
+
+/** 按 widget 规则格式化字段示例值（与固件 formatter.c 规则一致，仅用于预览） */
+function formatPreview(w: Widget, sample: string | undefined): string {
+  const trimmed = String(sample ?? '').trim()
+  const num = Number(trimmed)
+  if (trimmed === '' || !Number.isFinite(num)) {
+    return `${trimmed}${w.unit}`
+  }
+  switch (w.format) {
+    case 1:
+      return `${num >= 0 ? '+' : ''}${num.toFixed(w.decimal_places)}%`
+    case 2:
+      return num.toFixed(w.decimal_places) + w.unit
+    default:
+      return (Number.isInteger(num) ? String(num) : String(num)) + w.unit
+  }
+}
+
+/** 涨跌颜色预览：正红负绿，与固件一致 */
+function previewColor(w: Widget, sample: string | undefined): string | undefined {
+  if (!w.use_change_color || sample === undefined) return undefined
+  const num = Number(String(sample).trim())
+  if (!Number.isFinite(num)) return undefined
+  if (num > 0) return '#ff4d4f'
+  if (num < 0) return '#52c41a'
+  return '#888'
+}
+
 function clamp(v: number, min: number, max: number) {
   return v < min ? min : v > max ? max : v
+}
+
+/** 取整到 GRID_SIZE 的倍数（网格吸附） */
+function snapToGrid(v: number) {
+  return Math.round(v / GRID_SIZE) * GRID_SIZE
 }
 
 /** 拖拽中的状态（move=移动 / resize=右下角缩放） */
@@ -32,6 +77,7 @@ interface DragState {
 export default function ScreenLayout() {
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [saving, setSaving] = useState(false)
+  const [snapOn, setSnapOn] = useState(true)
   const dragRef = useRef<DragState | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
 
@@ -75,12 +121,24 @@ export default function ScreenLayout() {
       const widgets = [...c.widgets]
       const w = widgets[d.index]
       if (d.mode === 'move') {
-        const nx = clamp(d.origX + Math.round(dx), 0, CANVAS_WIDTH - 1)
-        const ny = clamp(d.origY + Math.round(dy), 0, CANVAS_HEIGHT - 1)
+        let nx = d.origX + Math.round(dx)
+        let ny = d.origY + Math.round(dy)
+        if (snapOn) {
+          nx = snapToGrid(nx)
+          ny = snapToGrid(ny)
+        }
+        nx = clamp(nx, 0, CANVAS_WIDTH - 1)
+        ny = clamp(ny, 0, CANVAS_HEIGHT - 1)
         widgets[d.index] = { ...w, x: nx, y: ny }
       } else {
-        const nw = clamp(d.origW + Math.round(dx), 1, CANVAS_WIDTH - d.origX)
-        const nh = clamp(d.origH + Math.round(dy), 1, CANVAS_HEIGHT - d.origY)
+        let nw = d.origW + Math.round(dx)
+        let nh = d.origH + Math.round(dy)
+        if (snapOn) {
+          nw = snapToGrid(nw)
+          nh = snapToGrid(nh)
+        }
+        nw = clamp(nw, 1, CANVAS_WIDTH - d.origX)
+        nh = clamp(nh, 1, CANVAS_HEIGHT - d.origY)
         widgets[d.index] = { ...w, w: nw, h: nh }
       }
       return { ...c, widgets }
@@ -122,6 +180,14 @@ export default function ScreenLayout() {
         </Button>
       }
     >
+      {/* 吸附开关 */}
+      <div style={{ marginBottom: 8 }}>
+        <Space>
+          网格吸附（{GRID_SIZE}px）
+          <Switch size="small" checked={snapOn} onChange={setSnapOn} />
+        </Space>
+      </div>
+
       {/* 屏幕预览：顶部状态栏（系统保留）+ 可配置画布 */}
       <div
         style={{
@@ -189,30 +255,37 @@ export default function ScreenLayout() {
           ))}
           {widgets.map((w, i) => (
             <div
-              key={i}
-              onPointerDown={startDrag(i, 'move')}
-              title={`拖动移动 (${w.x},${w.y}) ${w.w}×${w.h}`}
-              style={{
-                position: 'absolute',
-                left: w.x * s,
-                top: w.y * s,
-                width: Math.max(1, w.w) * s,
-                height: Math.max(1, w.h) * s,
-                background: 'rgba(42,42,42,0.92)',
-                border: '1px solid #4a4a4a',
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: Math.min(w.font_size || 2, 4) * s * 2,
-                padding: 2,
-                overflow: 'hidden',
-                textAlign: 'center',
-                cursor: 'move',
-              }}
-            >
-              {w.label} {w.field_path}
-              {/* 右下角缩放把手 */}
+                key={i}
+                onPointerDown={startDrag(i, 'move')}
+                title={`拖动移动 (${w.x},${w.y}) ${w.w}×${w.h}`}
+                style={{
+                  position: 'absolute',
+                  left: w.x * s,
+                  top: w.y * s,
+                  width: Math.max(1, w.w) * s,
+                  height: Math.max(1, w.h) * s,
+                  background: 'rgba(42,42,42,0.92)',
+                  border: '1px solid #4a4a4a',
+                  color: '#fff',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: Math.min(w.font_size || 2, 4) * s,
+                  padding: 2,
+                  overflow: 'hidden',
+                  textAlign: 'center',
+                  cursor: 'move',
+                  lineHeight: 1.2,
+                }}
+              >
+                <div style={{ fontSize: Math.max(Math.min(w.font_size || 2, 4) * s * 0.7, 7), color: '#ccc', width: '100%' }}>
+                  {w.label || w.field_path}
+                </div>
+                <div style={{ color: previewColor(w, sampleOf(w)) ?? '#fff', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {formatPreview(w, sampleOf(w))}
+                </div>
+                {/* 右下角缩放把手 */}
               <div
                 onPointerDown={startDrag(i, 'resize')}
                 style={{
@@ -231,7 +304,7 @@ export default function ScreenLayout() {
       </div>
 
       <p style={{ color: '#888', fontSize: 12, marginBottom: 16 }}>
-        在画布上<b>拖动</b>移动位置、拖动<b>右下角</b>调整大小（单位像素）。
+        在画布上<b>拖动</b>移动位置、拖动<b>右下角</b>调整大小（单位像素）。开启吸附时按 {GRID_SIZE}px 网格对齐；
         可配置区域 {CANVAS_WIDTH}×{CANVAS_HEIGHT}（顶部状态栏 {STATUS_BAR_HEIGHT}px 为系统保留）；也可用下方输入框精调。
       </p>
 
@@ -251,6 +324,41 @@ export default function ScreenLayout() {
                 <InputNumber size="small" min={1} max={CANVAS_HEIGHT} value={w.h} onChange={(v) => updateWidget(i, { h: v ?? 1 })} />
               </Space>,
               <Space key="fmt" size={4}>
+                数据源:
+                <Select
+                  size="small"
+                  style={{ width: 120 }}
+                  value={w.interface_id}
+                  options={(config?.interfaces ?? []).map((it) => ({
+                    value: it.id,
+                    label: it.name || `接口#${it.id}`,
+                  }))}
+                  onChange={(v) => updateWidget(i, { interface_id: v as number })}
+                />
+                标签:
+                <Input
+                  size="small"
+                  style={{ width: 90 }}
+                  value={w.label}
+                  placeholder={w.field_path}
+                  onChange={(e) => updateWidget(i, { label: e.target.value })}
+                />
+                格式:
+                <Select
+                  size="small"
+                  style={{ width: 100 }}
+                  value={w.format}
+                  options={FORMAT_OPTIONS}
+                  onChange={(v) => updateWidget(i, { format: v as FormatType })}
+                />
+                单位:
+                <Input
+                  size="small"
+                  style={{ width: 56 }}
+                  value={w.unit}
+                  placeholder="无"
+                  onChange={(e) => updateWidget(i, { unit: e.target.value })}
+                />
                 字号:
                 <InputNumber size="small" min={1} max={6} value={w.font_size} onChange={(v) => updateWidget(i, { font_size: v ?? 2 })} />
                 小数位:

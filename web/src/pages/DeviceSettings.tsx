@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Card, Form, Input, InputNumber, Popconfirm, Slider, message } from 'antd'
+import { Button, Card, Form, Input, Popconfirm, Slider, message } from 'antd'
 import { api } from '../api/client'
 
 interface FormValues {
@@ -7,7 +7,6 @@ interface FormValues {
   ssid: string
   password: string
   brightness: number
-  refresh_interval_s: number
 }
 
 export default function DeviceSettings() {
@@ -25,7 +24,6 @@ export default function DeviceSettings() {
           ssid: cfg.ssid,
           password: cfg.password,
           brightness: cfg.brightness,
-          refresh_interval_s: Math.round((cfg.refresh_interval_ms || 5000) / 1000),
         }),
       )
       .catch((e: Error) => message.error(`读取配置失败: ${e.message}`))
@@ -42,7 +40,6 @@ export default function DeviceSettings() {
         ssid: values.ssid,
         password: values.password,
         brightness: values.brightness,
-        refresh_interval_ms: values.refresh_interval_s * 1000,
       })
       message.success('已保存')
       if (values.ssid !== cur.ssid) {
@@ -75,9 +72,6 @@ export default function DeviceSettings() {
         </Form.Item>
         <Form.Item name="password" label="Wi-Fi 密码">
           <Input.Password placeholder="请输入 Wi-Fi 密码" />
-        </Form.Item>
-        <Form.Item name="refresh_interval_s" label="刷新频率（秒）">
-          <InputNumber min={1} max={3600} style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item name="brightness" label="屏幕亮度">
           <Slider min={0} max={100} />

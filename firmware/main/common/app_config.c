@@ -13,8 +13,8 @@ void config_defaults(app_config_t *cfg)
 {
     memset(cfg, 0, sizeof(*cfg));
     snprintf(cfg->device_name, sizeof(cfg->device_name), "StockWatcher");
-    cfg->refresh_interval_ms = 5000;
     cfg->brightness = 80;
+    cfg->interface_count = 0;
     cfg->widget_count = 0;
 }
 
@@ -72,6 +72,7 @@ esp_err_t config_reset(void)
 
 static void widget_to_json(cJSON *w, const widget_t *src)
 {
+    cJSON_AddNumberToObject(w, "interface_id", src->interface_id);
     cJSON_AddStringToObject(w, "label", src->label);
     cJSON_AddStringToObject(w, "field_path", src->field_path);
     cJSON_AddNumberToObject(w, "format", src->format);
@@ -85,6 +86,14 @@ static void widget_to_json(cJSON *w, const widget_t *src)
     cJSON_AddNumberToObject(w, "font_size", src->font_size);
 }
 
+static void interface_to_json(cJSON *it, const interface_t *src)
+{
+    cJSON_AddNumberToObject(it, "id", src->id);
+    cJSON_AddStringToObject(it, "name", src->name);
+    cJSON_AddStringToObject(it, "url", src->url);
+    cJSON_AddNumberToObject(it, "refresh_interval_ms", src->refresh_interval_ms);
+}
+
 char *config_to_json(const app_config_t *cfg)
 {
     cJSON *root = cJSON_CreateObject();
@@ -94,9 +103,14 @@ char *config_to_json(const app_config_t *cfg)
     cJSON_AddStringToObject(root, "device_name", cfg->device_name);
     cJSON_AddStringToObject(root, "ssid", cfg->ssid);
     cJSON_AddStringToObject(root, "password", cfg->password);
-    cJSON_AddStringToObject(root, "api_url", cfg->api_url);
-    cJSON_AddNumberToObject(root, "refresh_interval_ms", cfg->refresh_interval_ms);
     cJSON_AddNumberToObject(root, "brightness", cfg->brightness);
+
+    cJSON *ia = cJSON_AddArrayToObject(root, "interfaces");
+    for (uint32_t i = 0; i < cfg->interface_count; i++) {
+        cJSON *it = cJSON_CreateObject();
+        interface_to_json(it, &cfg->interfaces[i]);
+        cJSON_AddItemToArray(ia, it);
+    }
 
     cJSON *arr = cJSON_AddArrayToObject(root, "widgets");
     for (uint32_t i = 0; i < cfg->widget_count; i++) {
@@ -128,15 +142,37 @@ esp_err_t config_from_json(const char *json, app_config_t *cfg)
     str_field(root, "device_name", cfg->device_name, sizeof(cfg->device_name));
     str_field(root, "ssid", cfg->ssid, sizeof(cfg->ssid));
     str_field(root, "password", cfg->password, sizeof(cfg->password));
-    str_field(root, "api_url", cfg->api_url, sizeof(cfg->api_url));
 
-    cJSON *v = cJSON_GetObjectItem(root, "refresh_interval_ms");
-    if (cJSON_IsNumber(v) && v->valueint > 0) {
-        cfg->refresh_interval_ms = v->valueint;
-    }
-    v = cJSON_GetObjectItem(root, "brightness");
+    cJSON *v = cJSON_GetObjectItem(root, "brightness");
     if (cJSON_IsNumber(v)) {
         cfg->brightness = (uint8_t)(v->valueint > 100 ? 100 : v->valueint);
+    }
+
+    /* interfaces 整体替换（上限 CONFIG_INTERFACE_MAX） */
+    cJSON *ia = cJSON_GetObjectItem(root, "interfaces");
+    if (cJSON_IsArray(ia)) {
+        cfg->interface_count = 0;
+        cJSON *it;
+        cJSON_ArrayForEach(it, ia) {
+            if (cfg->interface_count >= CONFIG_INTERFACE_MAX) {
+                break;
+            }
+            interface_t *iface = &cfg->interfaces[cfg->interface_count];
+            memset(iface, 0, sizeof(*iface));
+            cJSON *n = cJSON_GetObjectItem(it, "id");
+            if (cJSON_IsNumber(n)) {
+                iface->id = (uint32_t)n->valueint;
+            }
+            str_field(it, "name", iface->name, sizeof(iface->name));
+            str_field(it, "url", iface->url, sizeof(iface->url));
+            n = cJSON_GetObjectItem(it, "refresh_interval_ms");
+            if (cJSON_IsNumber(n) && n->valueint > 0) {
+                iface->refresh_interval_ms = (uint32_t)n->valueint;
+            } else {
+                iface->refresh_interval_ms = 5000; /* 缺省 5 秒 */
+            }
+            cfg->interface_count++;
+        }
     }
 
     /* widgets 整体替换（上限 CONFIG_WIDGET_MAX） */
@@ -156,6 +192,10 @@ esp_err_t config_from_json(const char *json, app_config_t *cfg)
             cJSON *n = cJSON_GetObjectItem(it, "format");
             if (cJSON_IsNumber(n)) {
                 w->format = (format_type_t)n->valueint;
+            }
+            n = cJSON_GetObjectItem(it, "interface_id");
+            if (cJSON_IsNumber(n)) {
+                w->interface_id = (uint32_t)n->valueint;
             }
             n = cJSON_GetObjectItem(it, "decimal_places");
             if (cJSON_IsNumber(n)) {
