@@ -53,6 +53,9 @@ esp_err_t config_load(app_config_t *cfg);
 /* 保存到 NVS */
 esp_err_t config_save(const app_config_t *cfg);
 
+/* 清空全部配置（抹除 "app" 命名空间） */
+esp_err_t config_reset(void);
+
 /* 序列化为 JSON 字符串（malloc，调用方 free） */
 char *config_to_json(const app_config_t *cfg);
 

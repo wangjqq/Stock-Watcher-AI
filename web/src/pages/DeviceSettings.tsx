@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Card, Form, Input, InputNumber, Slider, message } from 'antd'
+import { Button, Card, Form, Input, InputNumber, Popconfirm, Slider, message } from 'antd'
 import { api } from '../api/client'
 
 interface FormValues {
@@ -45,10 +45,22 @@ export default function DeviceSettings() {
         refresh_interval_ms: values.refresh_interval_s * 1000,
       })
       message.success('已保存')
+      if (values.ssid !== cur.ssid) {
+        message.info('Wi-Fi 已变更，设备正在切换网络，请稍候重连')
+      }
     } catch (e) {
       message.error(`保存失败: ${(e as Error).message}`)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const onReset = async () => {
+    try {
+      await api.reset()
+      message.success('配置已清空，设备即将重启')
+    } catch (e) {
+      message.error(`重置失败: ${(e as Error).message}`)
     }
   }
 
@@ -73,6 +85,15 @@ export default function DeviceSettings() {
         <Button type="primary" htmlType="submit" loading={saving}>
           保存
         </Button>
+        <Popconfirm
+          title="确定重置所有配置吗？"
+          description="设备将清空配置并重启，回到 AP 配网模式"
+          onConfirm={onReset}
+        >
+          <Button danger style={{ marginLeft: 8 }}>
+            重置配置
+          </Button>
+        </Popconfirm>
       </Form>
     </Card>
   )

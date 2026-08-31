@@ -17,6 +17,8 @@ export const api = {
   getConfig: () => request<AppConfig>('/api/config'),
   saveConfig: (cfg: AppConfig) =>
     request<{ ok: boolean }>('/api/config', { method: 'POST', body: JSON.stringify(cfg) }),
+  // 一键清空配置并重启
+  reset: () => request<{ ok: boolean }>('/api/reset', { method: 'POST' }),
   // 接口测试与字段解析
   testInterface: (url: string) =>
     request<TestResult>('/api/interface/test', { method: 'POST', body: JSON.stringify({ url }) }),

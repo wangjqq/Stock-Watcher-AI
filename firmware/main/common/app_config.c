@@ -51,6 +51,25 @@ esp_err_t config_save(const app_config_t *cfg)
     return err;
 }
 
+esp_err_t config_reset(void)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open("app", NVS_READWRITE, &h);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "nvs open failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    err = nvs_erase_all(h);
+    if (err == ESP_OK) {
+        err = nvs_commit(h);
+    }
+    nvs_close(h);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "config erased");
+    }
+    return err;
+}
+
 static void widget_to_json(cJSON *w, const widget_t *src)
 {
     cJSON_AddStringToObject(w, "label", src->label);

@@ -11,12 +11,13 @@ void layout_render(const app_config_t *cfg, const char *json_body)
 {
     cJSON *root = cJSON_Parse(json_body);
     if (!root) {
-        display_clear(0x000000);
-        display_update();
+        /* 只清可配置画布区（状态栏以上不动） */
+        display_fill_rect(0, STATUS_BAR_HEIGHT, CANVAS_WIDTH, CANVAS_HEIGHT, 0x000000);
         return;
     }
 
-    display_clear(0x000000);
+    /* 只清可配置画布区，状态栏由 status_bar 单独绘制 */
+    display_fill_rect(0, STATUS_BAR_HEIGHT, CANVAS_WIDTH, CANVAS_HEIGHT, 0x000000);
 
     for (uint32_t i = 0; i < cfg->widget_count; i++) {
         const widget_t *w = &cfg->widgets[i];
@@ -30,9 +31,9 @@ void layout_render(const app_config_t *cfg, const char *json_body)
         } else {
             snprintf(line, sizeof(line), "%s", out.text);
         }
-        display_draw_text(w->x, w->y, line, w->font_size, out.color);
+        /* x/y 为画布内像素坐标（0..127, 0..143），y 偏移到状态栏下方 */
+        display_draw_text(w->x, w->y + STATUS_BAR_HEIGHT, line, w->font_size, out.color);
     }
 
-    display_update();
     cJSON_Delete(root);
 }

@@ -13,6 +13,7 @@ static const char *TAG = "wifi";
 
 static bool s_connected = false;
 static char s_ip[32] = "";
+static char s_applied_ssid[CONFIG_SSID_MAX] = ""; /* 当前已生效的 ssid，用于检测是否需要重连 */
 
 static void event_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
@@ -74,6 +75,49 @@ esp_err_t wifi_manager_init(const app_config_t *cfg)
     }
 
     ESP_ERROR_CHECK(esp_wifi_start());
+    strlcpy(s_applied_ssid, cfg->ssid, sizeof(s_applied_ssid));
+    return ESP_OK;
+}
+
+/* 网页保存配置后调用：ssid 变化时重新配置并重连，无需重启 */
+esp_err_t wifi_manager_apply_config(const app_config_t *cfg)
+{
+    if (strcmp(s_applied_ssid, cfg->ssid) == 0) {
+        return ESP_OK; /* WiFi 配置没变，保持当前连接 */
+    }
+    s_connected = false;
+    esp_err_t err = esp_wifi_stop();
+    if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_STARTED) {
+        ESP_LOGE(TAG, "wifi stop failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    if (strlen(cfg->ssid) > 0) {
+        /* STA 模式：连接用户配置的网络 */
+        wifi_config_t sta = { 0 };
+        strlcpy((char *)sta.sta.ssid, cfg->ssid, sizeof(sta.sta.ssid));
+        strlcpy((char *)sta.sta.password, cfg->password, sizeof(sta.sta.password));
+        sta.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta));
+    } else {
+        /* AP 配网模式：热点名 StockWatcher-xxxx */
+        uint8_t mac[6];
+        esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+        char ssid[32];
+        snprintf(ssid, sizeof(ssid), "StockWatcher-%02X%02X", mac[4], mac[5]);
+        wifi_config_t ap = { 0 };
+        strlcpy((char *)ap.ap.ssid, ssid, sizeof(ap.ap.ssid));
+        strlcpy((char *)ap.ap.password, "12345678", sizeof(ap.ap.password));
+        ap.ap.max_connection = 4;
+        ap.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));
+    }
+
+    ESP_ERROR_CHECK(esp_wifi_start());
+    strlcpy(s_applied_ssid, cfg->ssid, sizeof(s_applied_ssid));
+    ESP_LOGI(TAG, "wifi config applied (mode=%s)", strlen(cfg->ssid) > 0 ? "STA" : "AP");
     return ESP_OK;
 }
 
@@ -94,6 +138,18 @@ esp_err_t wifi_manager_start_mdns(const char *hostname)
 bool wifi_manager_is_connected(void)
 {
     return s_connected;
+}
+
+int wifi_manager_get_rssi(void)
+{
+    if (!s_connected) {
+        return 0;
+    }
+    wifi_ap_record_t ap;
+    if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
+        return ap.rssi;
+    }
+    return 0;
 }
 
 void wifi_manager_ip_str(char *out, size_t out_size)

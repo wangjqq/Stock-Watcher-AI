@@ -46,8 +46,8 @@ export default function FieldSelect() {
           use_change_color: false,
           x: 0,
           y: 0,
-          w: 4,
-          h: 1,
+          w: 64,
+          h: 16,
           font_size: 2,
         })
       }

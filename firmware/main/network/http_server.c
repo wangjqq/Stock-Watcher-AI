@@ -6,7 +6,10 @@
 #include "cJSON.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "app_config.h"
 #include "data_fetcher.h"
@@ -121,9 +124,24 @@ static esp_err_t api_post_config(httpd_req_t *req)
     if (err != ESP_OK) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "save failed");
     }
+    wifi_manager_apply_config(&cfg); /* WiFi 配置变化时自动重连，无需重启 */
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"ok\":true}");
     ESP_LOGI(TAG, "config saved");
+    return ESP_OK;
+}
+
+/* POST /api/reset  一键清空配置并重启（回到 AP 配网模式） */
+static esp_err_t api_reset(httpd_req_t *req)
+{
+    if (config_reset() != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "reset failed");
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    ESP_LOGI(TAG, "config reset, rebooting...");
+    vTaskDelay(pdMS_TO_TICKS(200)); /* 让响应先发出去 */
+    esp_restart();
     return ESP_OK;
 }
 
@@ -235,6 +253,7 @@ esp_err_t http_server_start(void)
         { .uri = "/", .method = HTTP_GET, .handler = handle_root },
         { .uri = "/api/config", .method = HTTP_GET, .handler = api_get_config },
         { .uri = "/api/config", .method = HTTP_POST, .handler = api_post_config },
+        { .uri = "/api/reset", .method = HTTP_POST, .handler = api_reset },
         { .uri = "/api/interface/test", .method = HTTP_POST, .handler = api_test_interface },
         { .uri = "/api/fields", .method = HTTP_GET, .handler = api_get_fields },
         { .uri = "/api/status", .method = HTTP_GET, .handler = api_get_status },

@@ -22,6 +22,7 @@ idf_component_register(
         "data/formatter.c"
         "display/display.c"
         "display/layout_renderer.c"
+        "display/status_bar.c"
         "${WEB_ASSETS_C}"
     INCLUDE_DIRS
         "."
