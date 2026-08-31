@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "driver/gpio.h"
+#include "driver/ledc.h"
 #include "driver/spi_master.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -135,17 +136,62 @@ static void st7735_init(void)
      * - 方向不对：MADCTL 改 0xC0 / 0xA0 / 0x60 等 */
 }
 
-esp_err_t display_init(void)
+/* ---------------- 背光（LEDC PWM，亮度 0-100） ---------------- */
+/* buzzer 用 TIMER_0/CH_0（低），led 用 TIMER_1/CH_1-3（低），背光独立用高模式 CH_4 */
+#define BL_LEDC_MODE    LEDC_HIGH_SPEED_MODE
+#define BL_LEDC_TIMER   LEDC_TIMER_2
+#define BL_LEDC_CHANNEL LEDC_CHANNEL_4
+
+static void backlight_set(uint8_t pct)
+{
+    if (pct > 100) {
+        pct = 100;
+    }
+    ledc_set_duty(BL_LEDC_MODE, BL_LEDC_CHANNEL, (uint32_t)pct * 255 / 100);
+    ledc_update_duty(BL_LEDC_MODE, BL_LEDC_CHANNEL);
+}
+
+static void backlight_init(uint8_t pct)
+{
+    ledc_timer_config_t timer = {
+        .speed_mode = BL_LEDC_MODE,
+        .timer_num = BL_LEDC_TIMER,
+        .duty_resolution = LEDC_TIMER_8_BIT, /* 0-255 对应 0-100% */
+        .freq_hz = 5000,
+        .clk_cfg = LEDC_AUTO_CLK,
+    };
+    ledc_timer_config(&timer);
+
+    ledc_channel_config_t ch = {
+        .gpio_num = PIN_BL,
+        .speed_mode = BL_LEDC_MODE,
+        .channel = BL_LEDC_CHANNEL,
+        .intr_type = LEDC_INTR_DISABLE,
+        .timer_sel = BL_LEDC_TIMER,
+        .duty = 0,
+        .hpoint = 0,
+    };
+    ledc_channel_config(&ch);
+
+    backlight_set(pct);
+}
+
+void display_set_brightness(uint8_t pct)
+{
+    backlight_set(pct);
+}
+
+esp_err_t display_init(uint8_t brightness)
 {
     gpio_config_t io = {
-        .pin_bit_mask = BIT(PIN_DC) | BIT(PIN_RST) | BIT(PIN_BL),
+        .pin_bit_mask = BIT(PIN_DC) | BIT(PIN_RST),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE,
     };
     gpio_config(&io);
-    gpio_set_level(PIN_BL, 1);   /* 点亮背光 */
+    backlight_init(brightness); /* 背光走 LEDC PWM */
 
     spi_bus_config_t bus = {
         .mosi_io_num = PIN_MOSI,

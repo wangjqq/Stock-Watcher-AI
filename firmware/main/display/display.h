@@ -16,7 +16,11 @@
 #define CANVAS_WIDTH        128
 #define CANVAS_HEIGHT       (DISPLAY_HEIGHT - STATUS_BAR_HEIGHT)  /* 144 */
 
-esp_err_t display_init(void);
+/* 初始化屏幕，brightness 为初始背光亮度 0-100 */
+esp_err_t display_init(uint8_t brightness);
+
+/* 运行期调整背光亮度 0-100（LEDC PWM） */
+void display_set_brightness(uint8_t pct);
 
 void display_clear(uint32_t color); /* RGB888 */
 void display_fill_rect(int x, int y, int w, int h, uint32_t color);

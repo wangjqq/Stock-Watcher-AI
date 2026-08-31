@@ -21,7 +21,8 @@ Stock-Watcher-AI/
 │       ├── main.c             # 入口：初始化 + 定时刷新主循环
 │       ├── CMakeLists.txt
 │       ├── common/            # 全局配置
-│       │   └── app_config.c/.h    # 配置模型 + NVS 存取 + JSON 序列化
+│       │   ├── app_config.c/.h    # 配置模型 + NVS 存取 + JSON 序列化
+│       │   └── version.h          # 固件版本号
 │       ├── network/           # 网络
 │       │   ├── wifi_manager.c/.h  # AP 配网 / STA 连接 / mDNS
 │       │   ├── http_server.c/.h   # 内置 HTTP 服务：REST API + 内嵌静态页面
@@ -30,9 +31,16 @@ Stock-Watcher-AI/
 │       │   ├── field_parser.c/.h  # 通用 JSON 自动解析（对象/数组 → 字段树）
 │       │   └── formatter.c/.h     # 字段格式化（颜色/百分号/小数位/单位）
 │       ├── display/           # 屏幕显示
-│       │   ├── display.c/.h       # ST7735 1.8" 128x160 驱动（SPI + 帧缓冲 + 8x8 点阵字体）
+│       │   ├── display.c/.h       # ST7735 1.8" 128x160 驱动（SPI + 帧缓冲 + 背光 PWM + 8x8 点阵字体）
 │       │   ├── status_bar.c/.h    # 顶部状态栏（时间/信号/电量，SNTP 校时）
+│       │   ├── app_ui.c/.h        # 应用列表菜单 + 内置「系统」应用页面
 │       │   └── layout_renderer.c/.h # 按配置把数据渲染到画布
+│       ├── hardware/          # 输入输出硬件
+│       │   ├── knob.c/.h          # 旋钮导航 + 返回键（正交解码 + 消抖）
+│       │   ├── buzzer.c/.h        # 无源蜂鸣器（PWM）
+│       │   ├── led.c/.h           # RGB LED（三引脚）
+│       │   ├── indicator.c/.h     # 状态灯逻辑（按网络/涨跌变色）
+│       │   └── selftest.c/.h      # 上电自检
 │       └── web/               # 内嵌前端资源
 │           └── web_assets.h/.c    # 内嵌资源结构（.c 由生成器产出，构建期生成）
 └── web/               # 网页管理界面（React + TS + Vite + Ant Design）
@@ -137,11 +145,10 @@ idf.py -p COMx flash monitor
   - [x] 配置改为 `apps[]`：每个应用 = 名称 + 独立 widget 布局
   - [x] 前端新增「应用列表」配置页：新建 / 重命名 / 排序应用，并在每个应用内配置自己的布局
   - [x] 设备开机默认进入第一个应用
-- [ ] 旋钮交互（配合应用列表）
-  - [x] 旋钮旋转切换应用（循环切换，按键音 + 用缓存数据立即重绘）
-  - [ ] 应用列表菜单：旋转移动光标，按下（确认）打开所选应用，返回键回列表
-  - [ ] 应用内：旋转交给应用自身功能；返回键回应用列表
-  - [ ] 内置「系统」应用：亮度 / 手动刷新 / 状态（IP · 信号 · 版本）
+- [x] 旋钮交互（配合应用列表）
+  - [x] 应用列表菜单：旋转移动光标，按下（确认）打开所选应用，返回键回列表（末尾固定「系统」应用）
+  - [x] 应用内：旋转交给应用自身功能；返回键回应用列表
+  - [x] 内置「系统」应用：亮度调节 / 手动刷新 / 状态（IP · 信号 · 版本）
 - [ ] 条件提醒（alerts）
   - [ ] 配置新增 `alerts[]`：interface_id / field_path / 条件(> / <) / 阈值 / 启用
   - [ ] NVS 序列化与 config JSON 读写

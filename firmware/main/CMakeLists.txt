@@ -21,6 +21,7 @@ idf_component_register(
         "data/field_parser.c"
         "data/formatter.c"
         "display/display.c"
+        "display/app_ui.c"
         "display/layout_renderer.c"
         "display/status_bar.c"
         "hardware/knob.c"
