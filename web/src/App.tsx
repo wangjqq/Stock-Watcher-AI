@@ -1,29 +1,32 @@
 import { lazy, Suspense, useState } from 'react'
 import { Layout, Menu, Typography } from 'antd'
 import {
-  SettingOutlined,
   ApiOutlined,
-  PartitionOutlined,
+  AppstoreOutlined,
   LayoutOutlined,
+  PartitionOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 
 // 页面级代码分割，按需加载
 const DeviceSettings = lazy(() => import('./pages/DeviceSettings'))
 const ApiConfig = lazy(() => import('./pages/ApiConfig'))
 const FieldSelect = lazy(() => import('./pages/FieldSelect'))
+const AppList = lazy(() => import('./pages/AppList'))
 const ScreenLayout = lazy(() => import('./pages/ScreenLayout'))
 
 const { Sider, Header, Content } = Layout
 
-const PAGES: Record<string, React.ReactNode> = {
-  device: <DeviceSettings />,
-  api: <ApiConfig />,
-  fields: <FieldSelect />,
-  layout: <ScreenLayout />,
-}
-
 export default function App() {
   const [current, setCurrent] = useState('device')
+
+  const PAGES: Record<string, React.ReactNode> = {
+    device: <DeviceSettings />,
+    api: <ApiConfig />,
+    fields: <FieldSelect />,
+    apps: <AppList onNavigate={setCurrent} />,
+    layout: <ScreenLayout />,
+  }
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -40,6 +43,7 @@ export default function App() {
             { key: 'device', icon: <SettingOutlined />, label: '设备设置' },
             { key: 'api', icon: <ApiOutlined />, label: '接口配置' },
             { key: 'fields', icon: <PartitionOutlined />, label: '字段解析' },
+            { key: 'apps', icon: <AppstoreOutlined />, label: '应用列表' },
             { key: 'layout', icon: <LayoutOutlined />, label: '屏幕布局' },
           ]}
         />

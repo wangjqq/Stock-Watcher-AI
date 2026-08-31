@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Card, Form, Input, Popconfirm, Slider, message } from 'antd'
+import { Button, Card, Form, Input, Popconfirm, Slider, Switch, message } from 'antd'
 import { api } from '../api/client'
 
 interface FormValues {
@@ -7,12 +7,15 @@ interface FormValues {
   ssid: string
   password: string
   brightness: number
+  buzzer_enabled: boolean
+  buzzer_volume: number
 }
 
 export default function DeviceSettings() {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const buzzerEnabled = Form.useWatch('buzzer_enabled', form)
 
   useEffect(() => {
     setLoading(true)
@@ -24,6 +27,8 @@ export default function DeviceSettings() {
           ssid: cfg.ssid,
           password: cfg.password,
           brightness: cfg.brightness,
+          buzzer_enabled: cfg.buzzer_enabled,
+          buzzer_volume: cfg.buzzer_volume,
         }),
       )
       .catch((e: Error) => message.error(`读取配置失败: ${e.message}`))
@@ -40,6 +45,8 @@ export default function DeviceSettings() {
         ssid: values.ssid,
         password: values.password,
         brightness: values.brightness,
+        buzzer_enabled: values.buzzer_enabled,
+        buzzer_volume: values.buzzer_volume,
       })
       message.success('已保存')
       if (values.ssid !== cur.ssid) {
@@ -75,6 +82,12 @@ export default function DeviceSettings() {
         </Form.Item>
         <Form.Item name="brightness" label="屏幕亮度">
           <Slider min={0} max={100} />
+        </Form.Item>
+        <Form.Item name="buzzer_enabled" label="蜂鸣器" valuePropName="checked">
+          <Switch />
+        </Form.Item>
+        <Form.Item name="buzzer_volume" label="蜂鸣音量">
+          <Slider min={0} max={100} disabled={!buzzerEnabled} />
         </Form.Item>
         <Button type="primary" htmlType="submit" loading={saving}>
           保存

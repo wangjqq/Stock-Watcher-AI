@@ -2,16 +2,21 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, List, Select, Space, Tree, message } from 'antd'
 import { api } from '../api/client'
 import { fieldStore } from '../api/fieldStore'
+import { appStore } from '../api/appStore'
 import type { AppConfig, FieldInfo, Widget } from '../types'
 
 export default function FieldSelect() {
   const [config, setConfig] = useState<AppConfig | null>(null)
+  const [appIndex, setAppIndex] = useState(() => appStore.get())
   const [interfaceId, setInterfaceId] = useState<number | undefined>()
   const [fields, setFields] = useState<FieldInfo[]>([])
   const [selected, setSelected] = useState<string[]>([])
   const [testing, setTesting] = useState(false)
 
   const interfaces = config?.interfaces ?? []
+  const apps = config?.apps ?? []
+  const safeIndex = appIndex < apps.length ? appIndex : 0
+  const app = apps[safeIndex]
   const current = interfaces.find((i) => i.id === interfaceId)
 
   useEffect(() => {
@@ -25,6 +30,11 @@ export default function FieldSelect() {
       })
       .catch((e: Error) => message.error(`读取失败: ${e.message}`))
   }, [])
+
+  const switchApp = (index: number) => {
+    appStore.set(index)
+    setAppIndex(index)
+  }
 
   /* 切换数据源时加载其已解析字段 */
   useEffect(() => {
@@ -69,7 +79,8 @@ export default function FieldSelect() {
     if (interfaceId === undefined) return
     try {
       const cur = await api.getConfig()
-      const widgets: Widget[] = [...(cur.widgets ?? [])]
+      const idx = safeIndex < cur.apps.length ? safeIndex : 0
+      const widgets: Widget[] = [...(cur.apps[idx]?.widgets ?? [])]
       for (const path of selected) {
         const f = fields.find((x) => x.path === path)
         widgets.push({
@@ -87,10 +98,11 @@ export default function FieldSelect() {
           font_size: 2,
         })
       }
-      await api.saveConfig({ ...cur, widgets })
-      setConfig({ ...cur, widgets })
+      const apps = cur.apps.map((a, i) => (i === idx ? { ...a, widgets } : a))
+      await api.saveConfig({ ...cur, apps })
+      setConfig({ ...cur, apps })
       setSelected([])
-      message.success(`已添加 ${selected.length} 个显示字段`)
+      message.success(`已向「${app?.name || '应用'}」添加 ${selected.length} 个显示字段`)
     } catch (e) {
       message.error(`添加失败: ${(e as Error).message}`)
     }
@@ -98,7 +110,7 @@ export default function FieldSelect() {
 
   return (
     <Card
-      title="数据字段解析"
+      title={`数据字段解析（目标应用：「${app?.name || '应用'}」）`}
       extra={
         <Button type="primary" onClick={addWidgets} disabled={!selected.length}>
           添加显示字段
@@ -106,6 +118,13 @@ export default function FieldSelect() {
       }
     >
       <Space style={{ marginBottom: 16 }} wrap>
+        <span>目标应用：</span>
+        <Select
+          style={{ width: 180 }}
+          value={safeIndex}
+          onChange={switchApp}
+          options={apps.map((a, i) => ({ value: i, label: a.name || `应用 ${i + 1}` }))}
+        />
         <span>数据源：</span>
         <Select
           style={{ width: 260 }}
@@ -136,8 +155,8 @@ export default function FieldSelect() {
       )}
       <List
         size="small"
-        header="当前已选显示字段"
-        dataSource={config?.widgets ?? []}
+        header={`当前应用「${app?.name || '应用'}」已选显示字段`}
+        dataSource={app?.widgets ?? []}
         renderItem={(w) => (
           <List.Item>
             {w.label} → {w.field_path}（

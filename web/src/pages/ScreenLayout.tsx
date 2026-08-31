@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { Button, Card, Input, InputNumber, List, Select, Space, Switch, message } from 'antd'
 import { api } from '../api/client'
 import { fieldStore } from '../api/fieldStore'
+import { appStore } from '../api/appStore'
 import type { AppConfig, FormatType, Widget } from '../types'
 import {
   CANVAS_HEIGHT,
@@ -76,6 +77,7 @@ interface DragState {
 
 export default function ScreenLayout() {
   const [config, setConfig] = useState<AppConfig | null>(null)
+  const [appIndex, setAppIndex] = useState(() => appStore.get())
   const [saving, setSaving] = useState(false)
   const [snapOn, setSnapOn] = useState(true)
   const dragRef = useRef<DragState | null>(null)
@@ -88,12 +90,24 @@ export default function ScreenLayout() {
       .catch((e: Error) => message.error(`读取失败: ${e.message}`))
   }, [])
 
+  const apps = config?.apps ?? []
+  const safeIndex = appIndex < apps.length ? appIndex : 0
+  const app = apps[safeIndex]
+  const widgets: Widget[] = app?.widgets ?? []
+
+  const switchApp = (index: number) => {
+    appStore.set(index)
+    setAppIndex(index)
+  }
+
   const updateWidget = (index: number, patch: Partial<Widget>) => {
     setConfig((c) => {
       if (!c) return c
-      const widgets = [...c.widgets]
-      widgets[index] = { ...widgets[index], ...patch }
-      return { ...c, widgets }
+      const idx = appIndex < c.apps.length ? appIndex : 0
+      const apps = c.apps.map((a, i) =>
+        i === idx ? { ...a, widgets: a.widgets.map((w, j) => (j === index ? { ...w, ...patch } : w)) } : a,
+      )
+      return { ...c, apps }
     })
   }
 
@@ -102,7 +116,7 @@ export default function ScreenLayout() {
     setSaving(true)
     try {
       const cur = await api.getConfig()
-      await api.saveConfig({ ...cur, widgets: config.widgets })
+      await api.saveConfig({ ...cur, apps: config.apps })
       message.success('布局已保存')
     } catch (e) {
       message.error(`保存失败: ${(e as Error).message}`)
@@ -118,7 +132,8 @@ export default function ScreenLayout() {
     const dy = (clientY - d.startClientY) / s
     setConfig((c) => {
       if (!c) return c
-      const widgets = [...c.widgets]
+      const idx = appIndex < c.apps.length ? appIndex : 0
+      const widgets = [...c.apps[idx].widgets]
       const w = widgets[d.index]
       if (d.mode === 'move') {
         let nx = d.origX + Math.round(dx)
@@ -141,7 +156,7 @@ export default function ScreenLayout() {
         nh = clamp(nh, 1, CANVAS_HEIGHT - d.origY)
         widgets[d.index] = { ...w, w: nw, h: nh }
       }
-      return { ...c, widgets }
+      return { ...c, apps: c.apps.map((a, i) => (i === idx ? { ...a, widgets } : a)) }
     })
   }
 
@@ -169,20 +184,25 @@ export default function ScreenLayout() {
     window.addEventListener('pointerup', up)
   }
 
-  const widgets: Widget[] = config?.widgets ?? []
-
   return (
     <Card
-      title={`屏幕显示配置（像素画布 ${CANVAS_WIDTH}×${CANVAS_HEIGHT}）`}
+      title={`屏幕显示配置（应用「${app?.name || ''}」，像素画布 ${CANVAS_WIDTH}×${CANVAS_HEIGHT}）`}
       extra={
         <Button type="primary" loading={saving} onClick={save} disabled={!widgets.length}>
           保存布局
         </Button>
       }
     >
-      {/* 吸附开关 */}
+      {/* 应用选择 + 吸附开关 */}
       <div style={{ marginBottom: 8 }}>
-        <Space>
+        <Space wrap>
+          当前应用：
+          <Select
+            style={{ width: 180 }}
+            value={safeIndex}
+            onChange={switchApp}
+            options={apps.map((a, i) => ({ value: i, label: a.name || `应用 ${i + 1}` }))}
+          />
           网格吸附（{GRID_SIZE}px）
           <Switch size="small" checked={snapOn} onChange={setSnapOn} />
         </Space>

@@ -14,6 +14,7 @@
 #define CONFIG_INTERFACE_MAX     8
 #define CONFIG_NAME_MAX          32
 #define CONFIG_WIDGET_MAX        32
+#define CONFIG_APP_MAX           8
 
 /* 字段显示格式 */
 typedef enum {
@@ -43,16 +44,25 @@ typedef struct {
     int    font_size;                         /* 字号 */
 } widget_t;
 
+/* 一个应用 = 一套屏幕布局（一个页面 = 一个应用） */
+typedef struct {
+    char     name[CONFIG_NAME_MAX];           /* 应用名 */
+    uint32_t widget_count;
+    widget_t widgets[CONFIG_WIDGET_MAX];
+} app_t;
+
 /* 设备全局配置 */
 typedef struct {
     char     device_name[CONFIG_DEVICE_NAME_MAX];
     char     ssid[CONFIG_SSID_MAX];           /* 为空则进入 AP 配网模式 */
     char     password[CONFIG_PASS_MAX];
     uint8_t  brightness;                      /* 屏幕亮度 0-100 */
+    bool     buzzer_enabled;                  /* 蜂鸣器开关 */
+    uint8_t  buzzer_volume;                   /* 蜂鸣音量 0-100 */
     uint32_t interface_count;
     interface_t interfaces[CONFIG_INTERFACE_MAX];
-    uint32_t widget_count;
-    widget_t widgets[CONFIG_WIDGET_MAX];
+    uint32_t app_count;
+    app_t    apps[CONFIG_APP_MAX];            /* 应用列表，第一个为开机默认应用 */
 } app_config_t;
 
 /* 填充默认值 */

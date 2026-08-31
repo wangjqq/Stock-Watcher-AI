@@ -23,6 +23,11 @@ idf_component_register(
         "display/display.c"
         "display/layout_renderer.c"
         "display/status_bar.c"
+        "hardware/knob.c"
+        "hardware/buzzer.c"
+        "hardware/led.c"
+        "hardware/indicator.c"
+        "hardware/selftest.c"
         "${WEB_ASSETS_C}"
     INCLUDE_DIRS
         "."
@@ -30,6 +35,7 @@ idf_component_register(
         "network"
         "data"
         "display"
+        "hardware"
         "web"
     REQUIRES
         nvs_flash
@@ -39,4 +45,5 @@ idf_component_register(
         esp_http_client
         json
         mdns
+        driver
 )

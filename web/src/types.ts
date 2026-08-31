@@ -25,14 +25,22 @@ export interface Widget {
   font_size: number
 }
 
+/** 一个应用 = 一套屏幕布局（一个页面 = 一个应用） */
+export interface App {
+  name: string
+  widgets: Widget[]
+}
+
 /** 设备全局配置 */
 export interface AppConfig {
   device_name: string
   ssid: string
   password: string
   brightness: number
+  buzzer_enabled: boolean
+  buzzer_volume: number
   interfaces: DataInterface[]
-  widgets: Widget[]
+  apps: App[]
 }
 
 /** 解析出的一个叶子字段 */
