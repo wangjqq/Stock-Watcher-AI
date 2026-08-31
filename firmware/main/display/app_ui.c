@@ -62,7 +62,7 @@ void app_ui_draw_menu(const char names[][CONFIG_NAME_MAX], int count, int cursor
     }
 }
 
-void app_ui_draw_system(int view, int cursor, uint8_t brightness,
+void app_ui_draw_system(int view, int cursor, uint8_t brightness, bool auto_brightness,
                         bool wifi_ok, int rssi, const char *ip,
                         const char *version, bool refreshing)
 {
@@ -107,7 +107,9 @@ void app_ui_draw_system(int view, int cursor, uint8_t brightness,
         draw_bar(8, STATUS_BAR_HEIGHT + 28, 112, 12, brightness);
         display_draw_text(92, STATUS_BAR_HEIGHT + 42, pct, 8, COL_FG);
 
-        display_draw_text(8, STATUS_BAR_HEIGHT + 70, "OK/BACK: back", 8, COL_DIM);
+        /* 自动亮度开启时由光敏接管，旋转调节不可用 */
+        display_draw_text(8, STATUS_BAR_HEIGHT + 70,
+                          auto_brightness ? "Auto: sensor" : "OK/BACK: back", 8, COL_DIM);
         return;
     }
 

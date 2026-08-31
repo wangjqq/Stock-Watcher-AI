@@ -8,16 +8,12 @@
 #include "esp_timer.h"
 
 #include "display.h"
+#include "battery.h"
 #include "wifi_manager.h"
 
 static const char *TAG = "status";
 
-/* 设备没有电池采样硬件，先固定显示满电量；
- * 接入电池/ADC 后把 s_battery 换成真实采样值即可。 */
-#define BATTERY_DEFAULT 100
-
 static bool s_sntp_started = false;
-static int s_battery = BATTERY_DEFAULT;
 
 void status_bar_start_sntp(void)
 {
@@ -54,5 +50,5 @@ void status_bar_draw(void)
         snprintf(time_str, sizeof(time_str), "U%02d:%02d", h, m);
     }
 
-    display_draw_status_bar(time_str, wifi_manager_get_rssi(), s_battery);
+    display_draw_status_bar(time_str, wifi_manager_get_rssi(), battery_get_percent());
 }

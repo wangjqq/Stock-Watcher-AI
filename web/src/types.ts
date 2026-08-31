@@ -37,6 +37,7 @@ export interface AppConfig {
   ssid: string
   password: string
   brightness: number
+  auto_brightness: boolean
   buzzer_enabled: boolean
   buzzer_volume: number
   interfaces: DataInterface[]

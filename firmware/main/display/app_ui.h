@@ -19,8 +19,8 @@ void app_ui_draw_menu(const char names[][CONFIG_NAME_MAX], int count, int cursor
 
 /* 在画布区绘制系统应用页。
  * view 为 SYS_VIEW_*；cursor 为系统菜单光标（0..SYS_ITEM_COUNT-1）；
- * brightness 0-100；wifi_ok / rssi / ip / version 为设备状态；
- * refreshing 为真时显示「刷新中」提示。 */
-void app_ui_draw_system(int view, int cursor, uint8_t brightness,
+ * brightness 0-100；auto_brightness 为真表示光敏自动亮度已开启；
+ * wifi_ok / rssi / ip / version 为设备状态；refreshing 为真时显示「刷新中」提示。 */
+void app_ui_draw_system(int view, int cursor, uint8_t brightness, bool auto_brightness,
                         bool wifi_ok, int rssi, const char *ip,
                         const char *version, bool refreshing);

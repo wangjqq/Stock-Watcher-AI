@@ -8,6 +8,7 @@
 
 #include "app_config.h"
 #include "app_ui.h"
+#include "battery.h"
 #include "buzzer.h"
 #include "data_fetcher.h"
 #include "display.h"
@@ -15,6 +16,7 @@
 #include "indicator.h"
 #include "knob.h"
 #include "layout_renderer.h"
+#include "light_sensor.h"
 #include "selftest.h"
 #include "status_bar.h"
 #include "version.h"
@@ -50,8 +52,22 @@ static int         s_sys = SYS_VIEW_MENU;   /* 系统应用内部视图 */
 static uint32_t    s_sys_cursor = 0;        /* 系统菜单光标 0..SYS_ITEM_COUNT-1 */
 static uint8_t     s_brightness = 80;       /* 当前亮度（会话值，主循环回写 NVS） */
 static bool        s_brightness_dirty = false;
+static bool        s_auto_brightness = false;      /* 光敏自动亮度开关（从 cfg 同步） */
+static uint32_t    s_last_light_ms = 0;            /* 上次光敏采样时间 */
 static bool        s_manual_refresh = false;        /* OK「手动刷新」置位，主循环立即拉取 */
 static uint32_t    s_refresh_feedback_ms = 0;       /* 手动刷新提示的截止时间 */
+
+/* 环境光照度 → 屏幕亮度（0-100）：亮环境更亮，暗环境更暗，留最低 10% 保证可读 */
+static uint8_t lux_to_brightness(uint16_t lux)
+{
+    if (lux >= 1000) {
+        return 100;
+    }
+    if (lux <= 10) {
+        return 10;
+    }
+    return (uint8_t)(10 + (uint32_t)(lux - 10) * 90 / 990);
+}
 
 /* 按键音 + 请求重绘 */
 static void key_feedback(void)
@@ -64,6 +80,12 @@ static void apply_brightness(void)
 {
     display_set_brightness(s_brightness);
     s_brightness_dirty = true;
+}
+
+/* 只更新硬件亮度，不写回 NVS（自动亮度用，避免频繁写 Flash） */
+static void apply_brightness_hw(void)
+{
+    display_set_brightness(s_brightness);
 }
 
 /* --- 应用列表菜单：旋转移动光标，OK 打开，BACK 无操作 --- */
@@ -222,7 +244,7 @@ static void render_canvas(const app_config_t *cfg)
         char ip[32];
         wifi_manager_ip_str(ip, sizeof(ip));
         bool refreshing = (uint32_t)(esp_timer_get_time() / 1000) < s_refresh_feedback_ms;
-        app_ui_draw_system(s_sys, (int)s_sys_cursor, s_brightness,
+        app_ui_draw_system(s_sys, (int)s_sys_cursor, s_brightness, s_auto_brightness,
                            wifi_manager_is_connected(), wifi_manager_get_rssi(),
                            ip, FW_VERSION, refreshing);
         return;
@@ -253,6 +275,8 @@ void app_main(void)
     buzzer_init();
     led_init();
     indicator_init();
+    battery_init();      /* ADC 电池电量（状态栏显示） */
+    light_sensor_init(); /* BH1750 光敏（自动亮度） */
     wifi_manager_init(&cfg);
     wifi_manager_start_mdns("stockwatcher");
     http_server_start();
@@ -292,11 +316,27 @@ void app_main(void)
         buzzer_set_enabled(cfg.buzzer_enabled);
         buzzer_set_volume(cfg.buzzer_volume);
 
+        /* 自动亮度开关随配置即时生效 */
+        s_auto_brightness = cfg.auto_brightness;
+
         if (wifi_manager_is_connected()) {
             status_bar_start_sntp();
         }
 
         uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+
+        /* 光敏自动亮度：每秒采样一次，按光照度映射亮度；传感器未接则跳过 */
+        if (s_auto_brightness && now_ms - s_last_light_ms >= 1000) {
+            s_last_light_ms = now_ms;
+            uint16_t lux = light_sensor_read_lux();
+            if (lux > 0) {
+                uint8_t auto_pct = lux_to_brightness(lux);
+                if (auto_pct != s_brightness) {
+                    s_brightness = auto_pct;
+                    apply_brightness_hw();
+                }
+            }
+        }
 
         /* 「系统」应用手动刷新：下一轮立即重新拉取全部接口 */
         if (s_manual_refresh) {

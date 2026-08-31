@@ -14,6 +14,7 @@ void config_defaults(app_config_t *cfg)
     memset(cfg, 0, sizeof(*cfg));
     snprintf(cfg->device_name, sizeof(cfg->device_name), "StockWatcher");
     cfg->brightness = 80;
+    cfg->auto_brightness = false;
     cfg->buzzer_enabled = true;
     cfg->buzzer_volume = 70;
     cfg->interface_count = 0;
@@ -111,6 +112,7 @@ char *config_to_json(const app_config_t *cfg)
     cJSON_AddStringToObject(root, "ssid", cfg->ssid);
     cJSON_AddStringToObject(root, "password", cfg->password);
     cJSON_AddNumberToObject(root, "brightness", cfg->brightness);
+    cJSON_AddBoolToObject(root, "auto_brightness", cfg->auto_brightness);
     cJSON_AddBoolToObject(root, "buzzer_enabled", cfg->buzzer_enabled);
     cJSON_AddNumberToObject(root, "buzzer_volume", cfg->buzzer_volume);
 
@@ -206,6 +208,11 @@ esp_err_t config_from_json(const char *json, app_config_t *cfg)
     cJSON *v = cJSON_GetObjectItem(root, "brightness");
     if (cJSON_IsNumber(v)) {
         cfg->brightness = (uint8_t)(v->valueint > 100 ? 100 : v->valueint);
+    }
+
+    v = cJSON_GetObjectItem(root, "auto_brightness");
+    if (cJSON_IsBool(v)) {
+        cfg->auto_brightness = cJSON_IsTrue(v);
     }
 
     v = cJSON_GetObjectItem(root, "buzzer_enabled");

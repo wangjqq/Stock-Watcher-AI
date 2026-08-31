@@ -29,6 +29,8 @@ idf_component_register(
         "hardware/led.c"
         "hardware/indicator.c"
         "hardware/selftest.c"
+        "hardware/battery.c"
+        "hardware/light_sensor.c"
         "${WEB_ASSETS_C}"
     INCLUDE_DIRS
         "."

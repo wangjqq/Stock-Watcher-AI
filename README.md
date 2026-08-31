@@ -40,6 +40,8 @@ Stock-Watcher-AI/
 │       │   ├── buzzer.c/.h        # 无源蜂鸣器（PWM）
 │       │   ├── led.c/.h           # RGB LED（三引脚）
 │       │   ├── indicator.c/.h     # 状态灯逻辑（按网络/涨跌变色）
+│       │   ├── battery.c/.h       # 电池电量（ADC 分压采样 + 平滑滤波）
+│       │   ├── light_sensor.c/.h  # 光敏 BH1750（I2C 读光照度 → 自动亮度）
 │       │   └── selftest.c/.h      # 上电自检
 │       └── web/               # 内嵌前端资源
 │           └── web_assets.h/.c    # 内嵌资源结构（.c 由生成器产出，构建期生成）
@@ -104,7 +106,7 @@ idf.py -p COMx flash monitor
 
 - 屏幕：ST7735 1.8" 128×160（8pin，SPI）。接线见 [firmware/PINMAP.md](firmware/PINMAP.md)。
 - 顶部 16px 为**状态栏**（系统保留，不参与布局）：左侧时间（SNTP 校时，未同步时显示运行时长），
-  右侧信号 4 格 + 电池电量（当前无电池采样，固定满电）。
+  右侧信号 4 格 + 电池电量（ADC 分压采样，实时显示，未接电池时约为 0%）。
 - 状态栏下方 **128×144 为可配置画布**（共 18432 像素）。前端「屏幕布局」与固件 `display.h` 共用同一组
   常量（`web/src/constants.ts` ⇄ `firmware/main/display/display.h`），Widget 的 x/y/w/h 均为画布内像素坐标，
   前端预览按 2 倍放大展示。
@@ -119,11 +121,11 @@ idf.py -p COMx flash monitor
 
 ## 第二阶段：升级规划（P0 → P2 全量排期）
 
-> 新增硬件：**带按键旋钮（EC11 / E8H6）+ 返回键** + 无源蜂鸣器 + RGB LED（三引脚）。接线最终同步到 [PINMAP.md](firmware/PINMAP.md)。
+> 新增硬件：**带按键旋钮（EC11 / E8H6）+ 返回键** + 无源蜂鸣器 + RGB LED（三引脚）+ **光敏 BH1750 + 电池电量 ADC**。接线最终同步到 [PINMAP.md](firmware/PINMAP.md)。
 > **交互模型**：一个页面 = 一个应用，前端配置「应用列表」；**旋钮旋转 = 导航、旋钮按下 = 确认、独立返回键 = 返回**。
-> 新模块统一放 `firmware/main/hardware/`（knob / buzzer / led）。
+> 新模块统一放 `firmware/main/hardware/`（knob / buzzer / led / battery / light_sensor）。
 
-### 硬件（三件套）
+### 硬件（五件套）
 
 - [x] 旋钮导航 + 返回键
   - [x] 接线：旋钮 A=GPIO25 / B=GPIO26 / SW=GPIO27（按下确认），返回键=GPIO14（内部上拉 + 软件消抖 + 正交解码）
@@ -138,6 +140,15 @@ idf.py -p COMx flash monitor
   - [x] 接线：GPIO 33 / 21 / 22
   - [x] `led` 模块：`led_set` / `led_blink` / 呼吸
   - [x] 状态色：联网绿 / 断网红 / 刷新闪 / 告警橙，随涨跌字段变色
+- [x] 光敏传感器（BH1750，自动亮度）
+  - [x] 接线：SDA=GPIO32 / SCL=GPIO19（I2C_NUM_0，后续 I2C 传感器可复用总线）
+  - [x] `light_sensor` 模块：持续高分辨率读 lux，未接传感器自动跳过不影响运行
+  - [x] 网页「设备设置」新增自动亮度开关（开启后亮度滑条禁用）
+  - [x] 系统「亮度」页显示 `Auto: sensor`；自动亮度只改硬件不回写 NVS
+- [x] 电池电量（ADC 分压采样）
+  - [x] 接线：GPIO36（ADC1_CH0）+ 100K/100K 分压电阻（3.0~4.2V → 1.5~2.1V）
+  - [x] `battery` 模块：ADC 采样 + 指数平滑 + 电压→电量映射
+  - [x] 状态栏右侧实时显示电量（未接电池时约为 0%）
 
 ### P0：脱机闭环（旋钮 + 应用列表一体做）
 

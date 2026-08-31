@@ -7,6 +7,7 @@ interface FormValues {
   ssid: string
   password: string
   brightness: number
+  auto_brightness: boolean
   buzzer_enabled: boolean
   buzzer_volume: number
 }
@@ -16,6 +17,7 @@ export default function DeviceSettings() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const buzzerEnabled = Form.useWatch('buzzer_enabled', form)
+  const autoBrightness = Form.useWatch('auto_brightness', form)
 
   useEffect(() => {
     setLoading(true)
@@ -27,6 +29,7 @@ export default function DeviceSettings() {
           ssid: cfg.ssid,
           password: cfg.password,
           brightness: cfg.brightness,
+          auto_brightness: cfg.auto_brightness,
           buzzer_enabled: cfg.buzzer_enabled,
           buzzer_volume: cfg.buzzer_volume,
         }),
@@ -45,6 +48,7 @@ export default function DeviceSettings() {
         ssid: values.ssid,
         password: values.password,
         brightness: values.brightness,
+        auto_brightness: values.auto_brightness,
         buzzer_enabled: values.buzzer_enabled,
         buzzer_volume: values.buzzer_volume,
       })
@@ -81,7 +85,15 @@ export default function DeviceSettings() {
           <Input.Password placeholder="请输入 Wi-Fi 密码" />
         </Form.Item>
         <Form.Item name="brightness" label="屏幕亮度">
-          <Slider min={0} max={100} />
+          <Slider min={0} max={100} disabled={autoBrightness} />
+        </Form.Item>
+        <Form.Item
+          name="auto_brightness"
+          label="自动亮度（光敏传感器）"
+          extra="开启后由 BH1750 光敏传感器按环境光照度自动调节屏幕亮度"
+          valuePropName="checked"
+        >
+          <Switch />
         </Form.Item>
         <Form.Item name="buzzer_enabled" label="蜂鸣器" valuePropName="checked">
           <Switch />
