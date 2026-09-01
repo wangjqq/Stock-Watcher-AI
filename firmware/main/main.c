@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -12,6 +13,7 @@
 #include "buzzer.h"
 #include "data_fetcher.h"
 #include "display.h"
+#include "field_parser.h"
 #include "http_server.h"
 #include "indicator.h"
 #include "knob.h"
@@ -57,6 +59,12 @@ static uint32_t    s_last_light_ms = 0;            /* 上次光敏采样时间 *
 static bool        s_manual_refresh = false;        /* OK「手动刷新」置位，主循环立即拉取 */
 static uint32_t    s_refresh_feedback_ms = 0;       /* 手动刷新提示的截止时间 */
 
+/* 条件提醒：各规则的触发态（防止条件一直成立时重复报警），运行期状态不持久化 */
+static bool s_alert_triggered[CONFIG_ALERT_MAX];
+/* 告警横幅：触发后一段时间在画布顶部显示红色提示 */
+static uint32_t s_alert_until_ms = 0;
+static char     s_alert_label[CONFIG_FIELD_PATH_MAX];
+
 /* 环境光照度 → 屏幕亮度（0-100）：亮环境更亮，暗环境更暗，留最低 10% 保证可读 */
 static uint8_t lux_to_brightness(uint16_t lux)
 {
@@ -67,6 +75,60 @@ static uint8_t lux_to_brightness(uint16_t lux)
         return 10;
     }
     return (uint8_t)(10 + (uint32_t)(lux - 10) * 90 / 990);
+}
+
+/* 条件提醒：仅在拉到新数据后调用。
+ * 条件由「不满足 → 满足」时触发一次：蜂鸣 + LED 告警闪烁；
+ * 条件恢复后复位，可再次触发。 */
+static void check_alerts(const app_config_t *cfg, const char *const *bodies, const bool *has_body)
+{
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+
+    for (uint32_t a = 0; a < cfg->alert_count; a++) {
+        const alert_t *al = &cfg->alerts[a];
+        if (!al->enabled || strlen(al->field_path) == 0) {
+            continue;
+        }
+
+        /* 按接口 ID 找到对应接口索引 */
+        int idx = -1;
+        for (uint32_t k = 0; k < cfg->interface_count; k++) {
+            if (cfg->interfaces[k].id == al->interface_id) {
+                idx = (int)k;
+                break;
+            }
+        }
+        if (idx < 0 || !has_body || !has_body[idx] || !bodies || !bodies[idx] ||
+                strlen(bodies[idx]) == 0) {
+            continue; /* 数据源缺失或数据未就绪 */
+        }
+
+        cJSON *root = cJSON_Parse(bodies[idx]);
+        if (!root) {
+            continue;
+        }
+        cJSON *val = json_get_by_path(root, al->field_path);
+        bool fired = false;
+        if (cJSON_IsNumber(val)) {
+            double d = val->valuedouble;
+            fired = (al->condition == ALERT_GT) ? (d > (double)al->threshold)
+                                                : (d < (double)al->threshold);
+        }
+        cJSON_Delete(root);
+
+        if (fired && !s_alert_triggered[a]) {
+            s_alert_triggered[a] = true;
+            buzzer_play_event(SND_ALERT);
+            indicator_set_alert(true);
+            strlcpy(s_alert_label, al->field_path, sizeof(s_alert_label));
+            s_alert_until_ms = now_ms + 3000;
+            s_force_redraw = true;
+            ESP_LOGI("alert", "triggered #%u: %s %s %.2f", a, al->field_path,
+                     al->condition == ALERT_GT ? ">" : "<", (double)al->threshold);
+        } else if (!fired && s_alert_triggered[a]) {
+            s_alert_triggered[a] = false; /* 条件恢复，允许再次触发 */
+        }
+    }
 }
 
 /* 按键音 + 请求重绘 */
@@ -237,6 +299,13 @@ static void render_canvas(const app_config_t *cfg)
         int trend = 0;
         layout_render(cfg, s_current_app, bodies, s_has_body, &trend);
         indicator_set_trend(trend); /* 状态灯随涨跌字段变色 */
+
+        /* 条件提醒触发后：画布顶部显示红色告警横幅（短暂） */
+        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+        if (now_ms < s_alert_until_ms) {
+            display_fill_rect(0, STATUS_BAR_HEIGHT, CANVAS_WIDTH, 12, 0xF800); /* 红 */
+            display_draw_text(4, STATUS_BAR_HEIGHT + 2, s_alert_label, 8, 0xFFFF);
+        }
         return;
     }
 
@@ -387,6 +456,11 @@ void app_main(void)
                     any_fetched = true;
                     indicator_on_refresh(); /* 刷新闪光 */
                 }
+            }
+
+            /* 条件提醒：仅在拉到新数据后评估一次 */
+            if (any_fetched) {
+                check_alerts(&cfg, s_bodies, s_has_body);
             }
         }
 

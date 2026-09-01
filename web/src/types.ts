@@ -31,6 +31,18 @@ export interface App {
   widgets: Widget[]
 }
 
+/** 提醒条件：0 = 大于 >，1 = 小于 <（与固件 alert_cond_t 对应） */
+export type AlertCond = 0 | 1
+
+/** 条件提醒规则（全局，监控某个接口的数值字段） */
+export interface Alert {
+  enabled: boolean
+  interface_id: number
+  field_path: string
+  condition: AlertCond
+  threshold: number
+}
+
 /** 设备全局配置 */
 export interface AppConfig {
   device_name: string
@@ -42,6 +54,7 @@ export interface AppConfig {
   buzzer_volume: number
   interfaces: DataInterface[]
   apps: App[]
+  alerts: Alert[]
 }
 
 /** 解析出的一个叶子字段 */

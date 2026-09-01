@@ -41,7 +41,12 @@ void indicator_update(bool wifi_ok)
     uint32_t now = now_ms();
 
     if (now < s_alert_until) {
-        led_set_color(255, 140, 0); /* 告警橙 */
+        /* 告警：橙色闪烁（300ms 周期） */
+        if ((now / 300) & 1) {
+            led_set_color(255, 140, 0);
+        } else {
+            led_off();
+        }
     } else if (now < s_flash_until) {
         led_set_color(0, 140, 255); /* 刷新蓝 */
     } else if (s_trend > 0) {

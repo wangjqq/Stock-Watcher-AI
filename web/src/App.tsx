@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import { Layout, Menu, Typography } from 'antd'
 import {
+  AlertOutlined,
   ApiOutlined,
   AppstoreOutlined,
   LayoutOutlined,
@@ -14,6 +15,7 @@ const ApiConfig = lazy(() => import('./pages/ApiConfig'))
 const FieldSelect = lazy(() => import('./pages/FieldSelect'))
 const AppList = lazy(() => import('./pages/AppList'))
 const ScreenLayout = lazy(() => import('./pages/ScreenLayout'))
+const AlertConfig = lazy(() => import('./pages/AlertConfig'))
 
 const { Sider, Header, Content } = Layout
 
@@ -26,6 +28,7 @@ export default function App() {
     fields: <FieldSelect />,
     apps: <AppList onNavigate={setCurrent} />,
     layout: <ScreenLayout />,
+    alerts: <AlertConfig />,
   }
 
   return (
@@ -45,6 +48,7 @@ export default function App() {
             { key: 'fields', icon: <PartitionOutlined />, label: '字段解析' },
             { key: 'apps', icon: <AppstoreOutlined />, label: '应用列表' },
             { key: 'layout', icon: <LayoutOutlined />, label: '屏幕布局' },
+            { key: 'alerts', icon: <AlertOutlined />, label: '提醒设置' },
           ]}
         />
       </Sider>

@@ -102,6 +102,15 @@ static void interface_to_json(cJSON *it, const interface_t *src)
     cJSON_AddNumberToObject(it, "refresh_interval_ms", src->refresh_interval_ms);
 }
 
+static void alert_to_json(cJSON *al, const alert_t *src)
+{
+    cJSON_AddBoolToObject(al, "enabled", src->enabled);
+    cJSON_AddNumberToObject(al, "interface_id", src->interface_id);
+    cJSON_AddStringToObject(al, "field_path", src->field_path);
+    cJSON_AddNumberToObject(al, "condition", src->condition);
+    cJSON_AddNumberToObject(al, "threshold", src->threshold);
+}
+
 char *config_to_json(const app_config_t *cfg)
 {
     cJSON *root = cJSON_CreateObject();
@@ -135,6 +144,13 @@ char *config_to_json(const app_config_t *cfg)
             cJSON_AddItemToArray(ws, w);
         }
         cJSON_AddItemToArray(arr, ap);
+    }
+
+    cJSON *als = cJSON_AddArrayToObject(root, "alerts");
+    for (uint32_t i = 0; i < cfg->alert_count; i++) {
+        cJSON *al = cJSON_CreateObject();
+        alert_to_json(al, &cfg->alerts[i]);
+        cJSON_AddItemToArray(als, al);
     }
 
     char *str = cJSON_PrintUnformatted(root);
@@ -191,6 +207,28 @@ static void widget_from_json(cJSON *it, widget_t *w)
     n = cJSON_GetObjectItem(it, "font_size");
     if (cJSON_IsNumber(n)) {
         w->font_size = n->valueint;
+    }
+}
+
+static void alert_from_json(cJSON *it, alert_t *al)
+{
+    memset(al, 0, sizeof(*al));
+    cJSON *n = cJSON_GetObjectItem(it, "enabled");
+    if (cJSON_IsBool(n)) {
+        al->enabled = cJSON_IsTrue(n);
+    }
+    n = cJSON_GetObjectItem(it, "interface_id");
+    if (cJSON_IsNumber(n)) {
+        al->interface_id = (uint32_t)n->valueint;
+    }
+    str_field(it, "field_path", al->field_path, sizeof(al->field_path));
+    n = cJSON_GetObjectItem(it, "condition");
+    if (cJSON_IsNumber(n)) {
+        al->condition = (alert_cond_t)n->valueint;
+    }
+    n = cJSON_GetObjectItem(it, "threshold");
+    if (cJSON_IsNumber(n)) {
+        al->threshold = (float)n->valuedouble;
     }
 }
 
@@ -275,6 +313,20 @@ esp_err_t config_from_json(const char *json, app_config_t *cfg)
                 }
             }
             cfg->app_count++;
+        }
+    }
+
+    /* alerts 整体替换（上限 CONFIG_ALERT_MAX） */
+    cJSON *als = cJSON_GetObjectItem(root, "alerts");
+    if (cJSON_IsArray(als)) {
+        cfg->alert_count = 0;
+        cJSON *it;
+        cJSON_ArrayForEach(it, als) {
+            if (cfg->alert_count >= CONFIG_ALERT_MAX) {
+                break;
+            }
+            alert_from_json(it, &cfg->alerts[cfg->alert_count]);
+            cfg->alert_count++;
         }
     }
 

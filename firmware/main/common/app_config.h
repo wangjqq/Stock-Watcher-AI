@@ -15,6 +15,7 @@
 #define CONFIG_NAME_MAX          32
 #define CONFIG_WIDGET_MAX        32
 #define CONFIG_APP_MAX           8
+#define CONFIG_ALERT_MAX         8
 
 /* 字段显示格式 */
 typedef enum {
@@ -51,6 +52,21 @@ typedef struct {
     widget_t widgets[CONFIG_WIDGET_MAX];
 } app_t;
 
+/* 提醒条件：> 或 < */
+typedef enum {
+    ALERT_GT = 0,   /* 字段值 > 阈值 */
+    ALERT_LT,       /* 字段值 < 阈值 */
+} alert_cond_t;
+
+/* 条件提醒规则（全局，监控某个接口的数值字段） */
+typedef struct {
+    bool     enabled;                        /* 是否启用 */
+    uint32_t interface_id;                   /* 数据源接口 ID */
+    char     field_path[CONFIG_FIELD_PATH_MAX]; /* 要监控的数值字段路径 */
+    alert_cond_t condition;                  /* > 或 < */
+    float    threshold;                      /* 触发阈值 */
+} alert_t;
+
 /* 设备全局配置 */
 typedef struct {
     char     device_name[CONFIG_DEVICE_NAME_MAX];
@@ -64,6 +80,8 @@ typedef struct {
     interface_t interfaces[CONFIG_INTERFACE_MAX];
     uint32_t app_count;
     app_t    apps[CONFIG_APP_MAX];            /* 应用列表，第一个为开机默认应用 */
+    uint32_t alert_count;
+    alert_t  alerts[CONFIG_ALERT_MAX];        /* 条件提醒规则 */
 } app_config_t;
 
 /* 填充默认值 */
