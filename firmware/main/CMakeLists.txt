@@ -17,6 +17,7 @@ idf_component_register(
         "common/app_config.c"
         "network/wifi_manager.c"
         "network/http_server.c"
+        "network/ota.c"
         "network/data_fetcher.c"
         "data/field_parser.c"
         "data/formatter.c"

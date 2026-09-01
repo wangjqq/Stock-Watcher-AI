@@ -14,6 +14,7 @@
 #include "app_config.h"
 #include "data_fetcher.h"
 #include "field_parser.h"
+#include "ota.h"
 #include "version.h"
 #include "web_assets.h"
 #include "wifi_manager.h"
@@ -274,6 +275,9 @@ esp_err_t http_server_start(void)
 {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.uri_match_fn = httpd_uri_match_wildcard;
+    /* OTA 上传大固件需要更长的接收等待；handler 上限需容纳新增的 /api/ota */
+    cfg.recv_wait_timeout = 30;
+    cfg.max_uri_handlers = 16;
 
     httpd_handle_t server = NULL;
     if (httpd_start(&server, &cfg) != ESP_OK) {
@@ -294,6 +298,7 @@ esp_err_t http_server_start(void)
     for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
         httpd_register_uri_handler(server, &uris[i]);
     }
+    ota_register(server); /* POST /api/ota 固件升级 */
 
     ESP_LOGI(TAG, "http server started");
     return ESP_OK;

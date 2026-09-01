@@ -57,7 +57,8 @@ Stock-Watcher-AI/
         ├── pages/AppList.tsx         # 应用列表（新建/重命名/排序/删除，一个页面 = 一个应用）
         ├── pages/ScreenLayout.tsx    # 屏幕显示配置（像素拖拽布局，按选中应用）
         ├── pages/AlertConfig.tsx     # 提醒设置（条件触发蜂鸣 + LED 告警）
-        └── pages/SystemStatus.tsx    # 系统状态（IP · 信号 · 固件版本 · 运行时长）
+        ├── pages/SystemStatus.tsx    # 系统状态（IP · 信号 · 固件版本 · 运行时长）
+        └── pages/OtaUpgrade.tsx      # 固件升级（网页上传 .bin，OTA 双分区）
 ```
 
 ## 构建固件
@@ -77,6 +78,10 @@ idf.py build
 idf.py -p COMx flash monitor
 ```
 
+> 首次刷入 OTA 双分区表后，如需重新刷固件仍走 `idf.py flash`。
+> 之后每次 `idf.py build` 生成的 `build/*.bin`（app 镜像，含内嵌网页）可直接在
+> 网页「固件升级」页上传，实现 OTA 免插线升级。
+
 > 前端产物由 `firmware/tools/gen_web_assets.py` 在固件配置阶段生成 `web_assets.c`
 > 以字节数组直接内嵌进固件二进制，ESP32 通过 HTTP 服务在内存中发送给浏览器，
 > 不再依赖 SPIFFS 文件系统（体积更小、更可靠）。
@@ -94,6 +99,8 @@ idf.py -p COMx flash monitor
 7. **自动盯盘**：设备按各接口自己的刷新频率独立获取数据，并把当前显示的应用刷新到屏幕。
 8. **条件提醒**：在「提醒设置」配置规则（某个接口字段 **>** 或 **<** 阈值，可开关），
    条件满足时设备蜂鸣提示、状态灯橙色闪烁，并在画布顶部短暂显示触发字段路径。
+9. **固件升级**：在「固件升级」页选择 `idf.py build` 生成的 `.bin` 上传，设备边收边写、
+   校验通过后自动重启进新固件（OTA 双分区，上传中断不影响当前固件）。
 
 ## 设备端 REST API
 
@@ -105,6 +112,7 @@ idf.py -p COMx flash monitor
 | POST | /api/interface/test | 测试接口并解析字段，body: `{"url": "..."}`           |
 | GET  | /api/fields         | 最近一次测试解析出的字段                             |
 | GET  | /api/status         | 设备状态（连接/IP/运行时间）                         |
+| POST | /api/ota            | OTA 固件升级（body 为固件 .bin，校验通过后重启）    |
 
 ## 屏幕与画布
 
@@ -132,7 +140,7 @@ idf.py -p COMx flash monitor
 ### 硬件（五件套）
 
 - [x] 旋钮导航 + 返回键
-  - [x] 接线：旋钮 A=GPIO25 / B=GPIO26 / SW=GPIO27（按下确认），返回键=GPIO14（内部上拉 + 软件消抖 + 正交解码）
+  - [x] 接线：旋钮 A=GPIO25 / B=GPIO6 / SW=GPIO7（按下确认），返回键=GPIO14（内部上拉 + 软件消抖 + 正交解码；避开 S3 N16R8 的 PSRAM 占用引脚 26~37）
   - [x] `knob` 模块：旋转解码（EC11 / E8H6 原理相同）/ 按下确认 / 返回键事件
   - [x] 更新 PINMAP.md 接线图
 - [x] 无源蜂鸣器（PWM）
@@ -141,16 +149,16 @@ idf.py -p COMx flash monitor
   - [x] 声音事件表：按键 / 涨 / 跌 / 告警 / 断网
   - [x] 网页开关与音量配置
 - [x] RGB LED（三引脚）
-  - [x] 接线：GPIO 33 / 21 / 22
+  - [x] 接线：GPIO 38 / 21 / 22（R 通道避开 PSRAM 占用引脚）
   - [x] `led` 模块：`led_set` / `led_blink` / 呼吸
   - [x] 状态色：联网绿 / 断网红 / 刷新闪 / 告警橙，随涨跌字段变色
 - [x] 光敏传感器（BH1750，自动亮度）
-  - [x] 接线：SDA=GPIO32 / SCL=GPIO19（I2C_NUM_0，后续 I2C 传感器可复用总线）
+  - [x] 接线：SDA=GPIO8 / SCL=GPIO10（I2C_NUM_0，后续 I2C 传感器可复用总线；避开 PSRAM 占用引脚）
   - [x] `light_sensor` 模块：持续高分辨率读 lux，未接传感器自动跳过不影响运行
   - [x] 网页「设备设置」新增自动亮度开关（开启后亮度滑条禁用）
   - [x] 系统「亮度」页显示 `Auto: sensor`；自动亮度只改硬件不回写 NVS
 - [x] 电池电量（ADC 分压采样）
-  - [x] 接线：GPIO36（ADC1_CH0）+ 100K/100K 分压电阻（3.0~4.2V → 1.5~2.1V）
+  - [x] 接线：GPIO1（ADC1_CH0）+ 100K/100K 分压电阻（3.0~4.2V → 1.5~2.1V）
   - [x] `battery` 模块：ADC 采样 + 指数平滑 + 电压→电量映射
   - [x] 状态栏右侧实时显示电量（未接电池时约为 0%）
 
@@ -182,7 +190,7 @@ idf.py -p COMx flash monitor
 
 ### P2：进阶（可选）
 
-- [ ] OTA 升级（分区表加 ota_0 / ota_1 / ota_data，网页上传固件）
+- [x] OTA 升级（分区表 ota_0 / ota_1 / ota_data，网页上传固件）
 - [ ] 配置导入导出（下载 / 上传 JSON 配置）
 - [x] 低功耗（屏幕休眠 / 空闲降频 / 按键唤醒）
 - [x] 自动轮播（应用列表定时自动切换）
@@ -215,7 +223,6 @@ idf.py -p COMx flash monitor
 
 ### P3-D 会联网：连接与生态
 
-- [ ] **OTA 升级**：网页一键上传固件，双分区自动回滚，不再依赖 USB 刷机
 - [ ] **BLE 配网 + 状态透传**（ESP32 原生 BLE）：手机 App 快速配网、查看状态，不占用屏幕与旋钮
 - [ ] **MQTT 行情订阅**：订阅推送式行情替代轮询，数据秒级到达且更省电
 - [ ] **配置云同步**：JSON 配置上传 / 下载，多台设备一键复用同一套盯盘方案
