@@ -21,7 +21,10 @@
 
 static const char *TAG = "http";
 
+/* 接口测试原始数据缓存（栈上数组，保持较小） */
 #define BODY_MAX 4096
+/* 配置 JSON body 上限（保存 / 导入导出完整配置可能较大，read_body 用 malloc 读入） */
+#define CONFIG_BODY_MAX 16384
 #define RAW_SHOW_MAX 500
 
 /* 最近一次接口测试的解析结果（供字段选择页使用） */
@@ -33,7 +36,7 @@ static char s_last_raw[RAW_SHOW_MAX + 1];
 static char *read_body(httpd_req_t *req)
 {
     int len = req->content_len;
-    if (len <= 0 || len > BODY_MAX) {
+    if (len <= 0 || len > CONFIG_BODY_MAX) {
         return NULL;
     }
     char *buf = malloc(len + 1);

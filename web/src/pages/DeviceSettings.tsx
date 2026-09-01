@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Form, Input, InputNumber, Popconfirm, Slider, Space, Switch, message } from 'antd'
 import { api } from '../api/client'
+import type { AppConfig } from '../types'
 
 interface FormValues {
   device_name: string
@@ -20,30 +21,33 @@ export default function DeviceSettings() {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
   const autoBrightness = Form.useWatch('auto_brightness', form)
   const screenSleep = Form.useWatch('screen_sleep_enabled', form)
   const autoRotate = Form.useWatch('auto_rotate_enabled', form)
   const buzzerEnabled = Form.useWatch('buzzer_enabled', form)
 
+  const fillForm = (cfg: AppConfig) =>
+    form.setFieldsValue({
+      device_name: cfg.device_name,
+      ssid: cfg.ssid,
+      password: cfg.password,
+      brightness: cfg.brightness,
+      auto_brightness: cfg.auto_brightness,
+      screen_sleep_enabled: (cfg.screen_timeout_s ?? 0) > 0,
+      screen_sleep_s: cfg.screen_timeout_s || 60,
+      auto_rotate_enabled: (cfg.auto_rotate_s ?? 0) > 0,
+      auto_rotate_s: cfg.auto_rotate_s || 10,
+      buzzer_enabled: cfg.buzzer_enabled,
+      buzzer_volume: cfg.buzzer_volume,
+    })
+
   useEffect(() => {
     setLoading(true)
     api
       .getConfig()
-      .then((cfg) =>
-        form.setFieldsValue({
-          device_name: cfg.device_name,
-          ssid: cfg.ssid,
-          password: cfg.password,
-          brightness: cfg.brightness,
-          auto_brightness: cfg.auto_brightness,
-          screen_sleep_enabled: (cfg.screen_timeout_s ?? 0) > 0,
-          screen_sleep_s: cfg.screen_timeout_s || 60,
-          auto_rotate_enabled: (cfg.auto_rotate_s ?? 0) > 0,
-          auto_rotate_s: cfg.auto_rotate_s || 10,
-          buzzer_enabled: cfg.buzzer_enabled,
-          buzzer_volume: cfg.buzzer_volume,
-        }),
-      )
+      .then((cfg) => fillForm(cfg))
       .catch((e: Error) => message.error(`读取配置失败: ${e.message}`))
       .finally(() => setLoading(false))
   }, [form])
@@ -81,6 +85,49 @@ export default function DeviceSettings() {
       message.success('配置已清空，设备即将重启')
     } catch (e) {
       message.error(`重置失败: ${(e as Error).message}`)
+    }
+  }
+
+  /* 导出配置为 JSON 文件下载（含接口/应用/提醒等全部配置，含 Wi-Fi 密码，注意保管） */
+  const onExport = async () => {
+    try {
+      const cfg = await api.getConfig()
+      const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `stock-watcher-config-${cfg.device_name || 'device'}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      message.success('配置已导出')
+    } catch (e) {
+      message.error(`导出失败: ${(e as Error).message}`)
+    }
+  }
+
+  /* 导入配置文件：JSON 解析后整体覆盖保存到设备 */
+  const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // 允许重复选择同一文件
+    if (!file) return
+    try {
+      const parsed = JSON.parse(await file.text())
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        message.error('无效的配置文件（需要 JSON 对象）')
+        return
+      }
+      setImporting(true)
+      const before = await api.getConfig()
+      await api.saveConfig(parsed as AppConfig)
+      fillForm(parsed as AppConfig)
+      message.success('配置已导入')
+      if (parsed.ssid !== before.ssid) {
+        message.info('Wi-Fi 已变更，设备正在切换网络，请稍候重连')
+      }
+    } catch (e) {
+      message.error(`导入失败: ${(e as Error).message}`)
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -131,18 +178,33 @@ export default function DeviceSettings() {
         <Form.Item name="buzzer_volume" label="蜂鸣音量">
           <Slider min={0} max={100} disabled={!buzzerEnabled} />
         </Form.Item>
-        <Button type="primary" htmlType="submit" loading={saving}>
-          保存
-        </Button>
-        <Popconfirm
-          title="确定重置所有配置吗？"
-          description="设备将清空配置并重启，回到 AP 配网模式"
-          onConfirm={onReset}
-        >
-          <Button danger style={{ marginLeft: 8 }}>
-            重置配置
+        <Space wrap>
+          <Button type="primary" htmlType="submit" loading={saving}>
+            保存
           </Button>
-        </Popconfirm>
+          <Popconfirm
+            title="确定重置所有配置吗？"
+            description="设备将清空配置并重启，回到 AP 配网模式"
+            onConfirm={onReset}
+          >
+            <Button danger>重置配置</Button>
+          </Popconfirm>
+          <Button onClick={onExport}>导出配置</Button>
+          <Popconfirm
+            title="导入将覆盖当前全部配置"
+            description="包含接口 / 应用布局 / 提醒等，导入后自动保存生效"
+            onConfirm={() => fileRef.current?.click()}
+          >
+            <Button loading={importing}>导入配置</Button>
+          </Popconfirm>
+        </Space>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,application/json"
+          style={{ display: 'none' }}
+          onChange={onImportFile}
+        />
       </Form>
     </Card>
   )

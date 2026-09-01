@@ -101,6 +101,8 @@ idf.py -p COMx flash monitor
    条件满足时设备蜂鸣提示、状态灯橙色闪烁，并在画布顶部短暂显示触发字段路径。
 9. **固件升级**：在「固件升级」页选择 `idf.py build` 生成的 `.bin` 上传，设备边收边写、
    校验通过后自动重启进新固件（OTA 双分区，上传中断不影响当前固件）。
+10. **配置导入导出**：在「设备设置」页可把当前完整配置导出为 JSON 文件（含接口 / 应用布局 / 提醒 /
+    网络等，注意含 Wi-Fi 密码，妥善保管）；也可导入 JSON 配置文件整体覆盖设备配置，便于多台设备复用或备份。
 
 ## 设备端 REST API
 
@@ -112,7 +114,7 @@ idf.py -p COMx flash monitor
 | POST | /api/interface/test | 测试接口并解析字段，body: `{"url": "..."}`           |
 | GET  | /api/fields         | 最近一次测试解析出的字段                             |
 | GET  | /api/status         | 设备状态（连接/IP/运行时间）                         |
-| POST | /api/ota            | OTA 固件升级（body 为固件 .bin，校验通过后重启）    |
+| POST | /api/ota            | OTA 固件升级（body 为固件 .bin，校验通过后重启）     |
 
 ## 屏幕与画布
 
@@ -191,7 +193,7 @@ idf.py -p COMx flash monitor
 ### P2：进阶（可选）
 
 - [x] OTA 升级（分区表 ota_0 / ota_1 / ota_data，网页上传固件）
-- [ ] 配置导入导出（下载 / 上传 JSON 配置）
+- [x] 配置导入导出（下载 / 上传 JSON 配置）
 - [x] 低功耗（屏幕休眠 / 空闲降频 / 按键唤醒）
 - [x] 自动轮播（应用列表定时自动切换）
 
