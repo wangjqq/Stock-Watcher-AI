@@ -156,7 +156,8 @@ static void fields_to_json(cJSON *arr, const field_list_t *list)
     }
 }
 
-/* POST /api/interface/test  body: {"url": "..."} */
+/* POST /api/interface/test
+ * body: {"url": "...", "method": 0|1, "headers": ["Key: Value", ...], "post_body": "..."} */
 static esp_err_t api_test_interface(httpd_req_t *req)
 {
     char *body = read_body(req);
@@ -174,8 +175,36 @@ static esp_err_t api_test_interface(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no url");
     }
 
+    /* 按 body 构造测试请求：支持 method / headers / post_body */
+    interface_t it;
+    memset(&it, 0, sizeof(it));
+    it.method = REQ_GET;
+    strlcpy(it.url, u->valuestring, sizeof(it.url));
+    cJSON *m = cJSON_GetObjectItem(root, "method");
+    if (cJSON_IsNumber(m)) {
+        it.method = (http_method_t)m->valueint;
+    }
+    cJSON *hs = cJSON_GetObjectItem(root, "headers");
+    if (cJSON_IsArray(hs)) {
+        int hi = 0;
+        cJSON *h;
+        cJSON_ArrayForEach(h, hs) {
+            if (hi >= CONFIG_HEADER_MAX) {
+                break;
+            }
+            if (cJSON_IsString(h) && h->valuestring[0] != '\0') {
+                strlcpy(it.headers[hi], h->valuestring, CONFIG_HEADER_LEN);
+                hi++;
+            }
+        }
+    }
+    cJSON *pb = cJSON_GetObjectItem(root, "post_body");
+    if (cJSON_IsString(pb)) {
+        strlcpy(it.post_body, pb->valuestring, sizeof(it.post_body));
+    }
+
     char raw[BODY_MAX];
-    esp_err_t err = data_fetch(u->valuestring, raw, sizeof(raw), 5000);
+    esp_err_t err = data_fetch_iface(&it, raw, sizeof(raw), 5000);
 
     cJSON *resp = cJSON_CreateObject();
     cJSON_AddBoolToObject(resp, "ok", err == ESP_OK);

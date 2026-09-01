@@ -450,7 +450,7 @@ void app_main(void)
                     continue;
                 }
                 s_last_ms[i] = now_ms;
-                if (data_fetch(it->url, s_bodies[i], sizeof(s_bodies[i]), FETCH_TIMEOUT_MS) == ESP_OK
+                if (data_fetch_iface(it, s_bodies[i], sizeof(s_bodies[i]), FETCH_TIMEOUT_MS) == ESP_OK
                         && strlen(s_bodies[i]) > 0) {
                     s_has_body[i] = true;
                     any_fetched = true;

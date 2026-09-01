@@ -16,6 +16,9 @@
 #define CONFIG_WIDGET_MAX        32
 #define CONFIG_APP_MAX           8
 #define CONFIG_ALERT_MAX         8
+#define CONFIG_HEADER_MAX        4    /* 每个接口的自定义头数量上限 */
+#define CONFIG_HEADER_LEN        128  /* 单条头 "Key: Value" 的最大长度 */
+#define CONFIG_BODY_MAX          256  /* POST 请求体最大长度 */
 
 /* 字段显示格式 */
 typedef enum {
@@ -24,12 +27,21 @@ typedef enum {
     FORMAT_DECIMAL,     /* 固定小数位 + 可选单位 */
 } format_type_t;
 
+/* 请求方法 */
+typedef enum {
+    REQ_GET = 0,
+    REQ_POST,
+} http_method_t;
+
 /* 一个数据接口（每个接口可独立配置刷新时间） */
 typedef struct {
     uint32_t id;                        /* 接口 ID（widget 通过它引用数据源） */
     char     name[CONFIG_NAME_MAX];     /* 显示名 */
     char     url[CONFIG_API_URL_MAX];   /* 数据接口地址 */
     uint32_t refresh_interval_ms;       /* 该接口的刷新频率 */
+    http_method_t method;               /* GET / POST */
+    char     headers[CONFIG_HEADER_MAX][CONFIG_HEADER_LEN]; /* 自定义头，每行 "Key: Value" */
+    char     post_body[CONFIG_BODY_MAX];/* POST 请求体（可空） */
 } interface_t;
 
 /* 屏幕上的一个显示块（像素布局） */

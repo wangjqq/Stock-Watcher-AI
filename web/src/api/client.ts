@@ -19,9 +19,12 @@ export const api = {
     request<{ ok: boolean }>('/api/config', { method: 'POST', body: JSON.stringify(cfg) }),
   // 一键清空配置并重启
   reset: () => request<{ ok: boolean }>('/api/reset', { method: 'POST' }),
-  // 接口测试与字段解析
-  testInterface: (url: string) =>
-    request<TestResult>('/api/interface/test', { method: 'POST', body: JSON.stringify({ url }) }),
+  // 接口测试与字段解析（支持 GET/POST + 自定义头 + body）
+  testInterface: (url: string, method?: 0 | 1, headers?: string[], postBody?: string) =>
+    request<TestResult>('/api/interface/test', {
+      method: 'POST',
+      body: JSON.stringify({ url, method, headers, post_body: postBody }),
+    }),
   getFields: () => request<{ raw: string; fields: FieldInfo[] }>('/api/fields'),
   // 设备状态
   getStatus: () => request<DeviceStatus>('/api/status'),

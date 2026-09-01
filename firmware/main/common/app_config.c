@@ -100,6 +100,14 @@ static void interface_to_json(cJSON *it, const interface_t *src)
     cJSON_AddStringToObject(it, "name", src->name);
     cJSON_AddStringToObject(it, "url", src->url);
     cJSON_AddNumberToObject(it, "refresh_interval_ms", src->refresh_interval_ms);
+    cJSON_AddNumberToObject(it, "method", src->method);
+    cJSON_AddStringToObject(it, "post_body", src->post_body);
+    cJSON *hs = cJSON_AddArrayToObject(it, "headers");
+    for (int i = 0; i < CONFIG_HEADER_MAX; i++) {
+        if (src->headers[i][0] != '\0') {
+            cJSON_AddItemToArray(hs, cJSON_CreateString(src->headers[i]));
+        }
+    }
 }
 
 static void alert_to_json(cJSON *al, const alert_t *src)
@@ -284,6 +292,25 @@ esp_err_t config_from_json(const char *json, app_config_t *cfg)
                 iface->refresh_interval_ms = (uint32_t)n->valueint;
             } else {
                 iface->refresh_interval_ms = 5000; /* 缺省 5 秒 */
+            }
+            n = cJSON_GetObjectItem(it, "method");
+            if (cJSON_IsNumber(n)) {
+                iface->method = (http_method_t)n->valueint;
+            }
+            str_field(it, "post_body", iface->post_body, sizeof(iface->post_body));
+            cJSON *hs = cJSON_GetObjectItem(it, "headers");
+            if (cJSON_IsArray(hs)) {
+                int hi = 0;
+                cJSON *h;
+                cJSON_ArrayForEach(h, hs) {
+                    if (hi >= CONFIG_HEADER_MAX) {
+                        break;
+                    }
+                    if (cJSON_IsString(h) && h->valuestring[0] != '\0') {
+                        strlcpy(iface->headers[hi], h->valuestring, CONFIG_HEADER_LEN);
+                        hi++;
+                    }
+                }
             }
             cfg->interface_count++;
         }

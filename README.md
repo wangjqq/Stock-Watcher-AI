@@ -171,10 +171,10 @@ idf.py -p COMx flash monitor
 
 ### P1：接口增强 + 系统增强
 
-- [ ] 接口增强
-  - [ ] `interface_t` 加 `method`（GET / POST）与 `headers[]`
-  - [ ] `data_fetcher` 支持 POST + 自定义头（Token 鉴权）
-  - [ ] 网页「接口配置」对应表单
+- [x] 接口增强
+  - [x] `interface_t` 加 `method`（GET / POST）与 `headers[]`
+  - [x] `data_fetcher` 支持 POST + 自定义头（Token 鉴权）
+  - [x] 网页「接口配置」对应表单
 - [ ] 系统信息页
   - [ ] `/api/status` 加固件版本 / RSSI
   - [ ] 网页状态卡片 + 内置「系统」应用展示
