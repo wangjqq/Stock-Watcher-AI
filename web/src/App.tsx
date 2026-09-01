@@ -4,6 +4,7 @@ import {
   AlertOutlined,
   ApiOutlined,
   AppstoreOutlined,
+  DashboardOutlined,
   LayoutOutlined,
   PartitionOutlined,
   SettingOutlined,
@@ -16,6 +17,7 @@ const FieldSelect = lazy(() => import('./pages/FieldSelect'))
 const AppList = lazy(() => import('./pages/AppList'))
 const ScreenLayout = lazy(() => import('./pages/ScreenLayout'))
 const AlertConfig = lazy(() => import('./pages/AlertConfig'))
+const SystemStatus = lazy(() => import('./pages/SystemStatus'))
 
 const { Sider, Header, Content } = Layout
 
@@ -29,6 +31,7 @@ export default function App() {
     apps: <AppList onNavigate={setCurrent} />,
     layout: <ScreenLayout />,
     alerts: <AlertConfig />,
+    status: <SystemStatus />,
   }
 
   return (
@@ -49,6 +52,7 @@ export default function App() {
             { key: 'apps', icon: <AppstoreOutlined />, label: '应用列表' },
             { key: 'layout', icon: <LayoutOutlined />, label: '屏幕布局' },
             { key: 'alerts', icon: <AlertOutlined />, label: '提醒设置' },
+            { key: 'status', icon: <DashboardOutlined />, label: '系统状态' },
           ]}
         />
       </Sider>

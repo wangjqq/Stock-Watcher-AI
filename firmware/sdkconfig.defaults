@@ -8,3 +8,6 @@ CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
 
 # mDNS
 CONFIG_MDNS_MAX_SERVICES=4
+
+# 电源管理（屏幕休眠时 CPU 空闲自动降频，配合 main.c 的 esp_pm_configure）
+CONFIG_PM_ENABLE=y

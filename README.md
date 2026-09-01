@@ -56,7 +56,8 @@ Stock-Watcher-AI/
         ├── pages/FieldSelect.tsx     # 数据字段解析/选择（按数据源，添加到指定应用）
         ├── pages/AppList.tsx         # 应用列表（新建/重命名/排序/删除，一个页面 = 一个应用）
         ├── pages/ScreenLayout.tsx    # 屏幕显示配置（像素拖拽布局，按选中应用）
-        └── pages/AlertConfig.tsx     # 提醒设置（条件触发蜂鸣 + LED 告警）
+        ├── pages/AlertConfig.tsx     # 提醒设置（条件触发蜂鸣 + LED 告警）
+        └── pages/SystemStatus.tsx    # 系统状态（IP · 信号 · 固件版本 · 运行时长）
 ```
 
 ## 构建固件
@@ -175,13 +176,13 @@ idf.py -p COMx flash monitor
   - [x] `interface_t` 加 `method`（GET / POST）与 `headers[]`
   - [x] `data_fetcher` 支持 POST + 自定义头（Token 鉴权）
   - [x] 网页「接口配置」对应表单
-- [ ] 系统信息页
-  - [ ] `/api/status` 加固件版本 / RSSI
-  - [ ] 网页状态卡片 + 内置「系统」应用展示
+- [x] 系统信息页
+  - [x] `/api/status` 加固件版本 / RSSI
+  - [x] 网页状态卡片 + 内置「系统」应用展示
 
 ### P2：进阶（可选）
 
 - [ ] OTA 升级（分区表加 ota_0 / ota_1 / ota_data，网页上传固件）
 - [ ] 配置导入导出（下载 / 上传 JSON 配置）
-- [ ] 低功耗（屏幕休眠 / 空闲降频 / 按键唤醒）
-- [ ] 自动轮播（应用列表定时自动切换）
+- [x] 低功耗（屏幕休眠 / 空闲降频 / 按键唤醒）
+- [x] 自动轮播（应用列表定时自动切换）

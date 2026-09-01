@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Card, Form, Input, Popconfirm, Slider, Switch, message } from 'antd'
+import { Button, Card, Form, Input, InputNumber, Popconfirm, Slider, Space, Switch, message } from 'antd'
 import { api } from '../api/client'
 
 interface FormValues {
@@ -8,6 +8,10 @@ interface FormValues {
   password: string
   brightness: number
   auto_brightness: boolean
+  screen_sleep_enabled: boolean
+  screen_sleep_s: number
+  auto_rotate_enabled: boolean
+  auto_rotate_s: number
   buzzer_enabled: boolean
   buzzer_volume: number
 }
@@ -16,8 +20,10 @@ export default function DeviceSettings() {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const buzzerEnabled = Form.useWatch('buzzer_enabled', form)
   const autoBrightness = Form.useWatch('auto_brightness', form)
+  const screenSleep = Form.useWatch('screen_sleep_enabled', form)
+  const autoRotate = Form.useWatch('auto_rotate_enabled', form)
+  const buzzerEnabled = Form.useWatch('buzzer_enabled', form)
 
   useEffect(() => {
     setLoading(true)
@@ -30,6 +36,10 @@ export default function DeviceSettings() {
           password: cfg.password,
           brightness: cfg.brightness,
           auto_brightness: cfg.auto_brightness,
+          screen_sleep_enabled: (cfg.screen_timeout_s ?? 0) > 0,
+          screen_sleep_s: cfg.screen_timeout_s || 60,
+          auto_rotate_enabled: (cfg.auto_rotate_s ?? 0) > 0,
+          auto_rotate_s: cfg.auto_rotate_s || 10,
           buzzer_enabled: cfg.buzzer_enabled,
           buzzer_volume: cfg.buzzer_volume,
         }),
@@ -49,6 +59,8 @@ export default function DeviceSettings() {
         password: values.password,
         brightness: values.brightness,
         auto_brightness: values.auto_brightness,
+        screen_timeout_s: values.screen_sleep_enabled ? Math.max(1, values.screen_sleep_s) : 0,
+        auto_rotate_s: values.auto_rotate_enabled ? Math.max(1, values.auto_rotate_s) : 0,
         buzzer_enabled: values.buzzer_enabled,
         buzzer_volume: values.buzzer_volume,
       })
@@ -74,7 +86,7 @@ export default function DeviceSettings() {
 
   return (
     <Card title="设备设置" loading={loading}>
-      <Form form={form} layout="vertical" onFinish={onSave} style={{ maxWidth: 480 }}>
+      <Form form={form} layout="vertical" onFinish={onSave} style={{ maxWidth: 520 }}>
         <Form.Item name="device_name" label="设备名称">
           <Input placeholder="StockWatcher" />
         </Form.Item>
@@ -85,16 +97,34 @@ export default function DeviceSettings() {
           <Input.Password placeholder="请输入 Wi-Fi 密码" />
         </Form.Item>
         <Form.Item name="brightness" label="屏幕亮度">
-          <Slider min={0} max={100} disabled={autoBrightness} />
+          <Slider min={0} max={100} disabled={!!autoBrightness} />
         </Form.Item>
-        <Form.Item
-          name="auto_brightness"
-          label="自动亮度（光敏传感器）"
-          extra="开启后由 BH1750 光敏传感器按环境光照度自动调节屏幕亮度"
-          valuePropName="checked"
-        >
+        <Form.Item name="auto_brightness" label="自动亮度（光敏传感器）" valuePropName="checked">
           <Switch />
         </Form.Item>
+
+        <Form.Item label="屏幕休眠（无操作自动熄屏，按键唤醒）">
+          <Space>
+            <Form.Item name="screen_sleep_enabled" valuePropName="checked" noStyle>
+              <Switch />
+            </Form.Item>
+            <Form.Item name="screen_sleep_s" noStyle>
+              <InputNumber min={1} max={3600} addonAfter="秒" disabled={!screenSleep} />
+            </Form.Item>
+          </Space>
+        </Form.Item>
+
+        <Form.Item label="自动轮播（应用列表定时自动切换）">
+          <Space>
+            <Form.Item name="auto_rotate_enabled" valuePropName="checked" noStyle>
+              <Switch />
+            </Form.Item>
+            <Form.Item name="auto_rotate_s" noStyle>
+              <InputNumber min={1} max={3600} addonAfter="秒" disabled={!autoRotate} />
+            </Form.Item>
+          </Space>
+        </Form.Item>
+
         <Form.Item name="buzzer_enabled" label="蜂鸣器" valuePropName="checked">
           <Switch />
         </Form.Item>

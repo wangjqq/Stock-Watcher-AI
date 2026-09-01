@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_pm.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -65,6 +66,52 @@ static bool s_alert_triggered[CONFIG_ALERT_MAX];
 static uint32_t s_alert_until_ms = 0;
 static char     s_alert_label[CONFIG_FIELD_PATH_MAX];
 
+/* ---- 低功耗（屏幕休眠 / 空闲降频 / 按键唤醒） ---- */
+static bool     s_screen_asleep = false;   /* 屏幕是否处于休眠（背光熄灭） */
+static uint32_t s_last_activity_ms = 0;    /* 最后一次输入活动时间戳 */
+static uint32_t s_screen_timeout_s = 0;    /* 屏幕休眠超时（从 cfg 同步），0=关闭 */
+static uint32_t s_last_rotate_ms = 0;      /* 上次自动轮播时间戳 */
+static uint32_t s_auto_rotate_s = 0;       /* 自动轮播间隔（从 cfg 同步），0=关闭 */
+
+static void wake_screen(void); /* 供 check_alerts 在告警触发时唤醒屏幕 */
+
+/* 电源管理：让 CPU 空闲时自动降频（需 CONFIG_PM_ENABLE，未启用则静默忽略） */
+static void pm_init(void)
+{
+    esp_pm_config_esp32_t pm = {
+        .max_freq_mhz = 240,
+        .min_freq_mhz = 80,
+        .light_sleep_enable = false,
+    };
+    esp_err_t err = esp_pm_configure(&pm);
+    if (err != ESP_OK) {
+        ESP_LOGW("pm", "esp_pm not supported (%s), skip", esp_err_to_name(err));
+    }
+}
+
+/* 屏幕休眠：熄灭背光（数据拉取 / 告警 / 状态栏逻辑继续，盯盘不中断） */
+static void sleep_screen(void)
+{
+    if (s_screen_asleep) {
+        return;
+    }
+    s_screen_asleep = true;
+    display_set_brightness(0);
+    ESP_LOGI("power", "screen sleep");
+}
+
+/* 按键唤醒：恢复背光到当前亮度 */
+static void wake_screen(void)
+{
+    if (!s_screen_asleep) {
+        return;
+    }
+    s_screen_asleep = false;
+    display_set_brightness(s_brightness);
+    s_force_redraw = true;
+    ESP_LOGI("power", "screen wake");
+}
+
 /* 环境光照度 → 屏幕亮度（0-100）：亮环境更亮，暗环境更暗，留最低 10% 保证可读 */
 static uint8_t lux_to_brightness(uint16_t lux)
 {
@@ -122,6 +169,7 @@ static void check_alerts(const app_config_t *cfg, const char *const *bodies, con
             indicator_set_alert(true);
             strlcpy(s_alert_label, al->field_path, sizeof(s_alert_label));
             s_alert_until_ms = now_ms + 3000;
+            wake_screen(); /* 告警时点亮屏幕，让用户看到横幅 */
             s_force_redraw = true;
             ESP_LOGI("alert", "triggered #%u: %s %s %.2f", a, al->field_path,
                      al->condition == ALERT_GT ? ">" : "<", (double)al->threshold);
@@ -269,6 +317,12 @@ static void on_system_input(knob_event_t ev)
 /* 统一输入入口：按当前界面状态分发 */
 static void on_input(knob_event_t ev)
 {
+    /* 任何输入都视为活动：重置休眠计时；休眠中被唤醒 */
+    s_last_activity_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    if (s_screen_asleep) {
+        wake_screen();
+    }
+
     switch (s_ui) {
     case UI_MENU:   on_menu_input(ev);   break;
     case UI_APP:    on_app_input(ev);    break;
@@ -349,6 +403,7 @@ void app_main(void)
     wifi_manager_init(&cfg);
     wifi_manager_start_mdns("stockwatcher");
     http_server_start();
+    pm_init(); /* CPU 空闲自动降频（需 CONFIG_PM_ENABLE） */
 
     /* 上电硬件自检：LED 变色 + 蜂鸣（可经 selftest.h 关闭） */
     hw_selftest_run();
@@ -388,11 +443,32 @@ void app_main(void)
         /* 自动亮度开关随配置即时生效 */
         s_auto_brightness = cfg.auto_brightness;
 
+        /* 屏幕休眠 / 自动轮播参数随配置即时生效 */
+        s_screen_timeout_s = cfg.screen_timeout_s;
+        s_auto_rotate_s = cfg.auto_rotate_s;
+
         if (wifi_manager_is_connected()) {
             status_bar_start_sntp();
         }
 
         uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+
+        /* 屏幕休眠：无操作超时熄灭背光（0=关闭）。数据拉取/告警继续，盯盘不中断 */
+        if (s_screen_timeout_s > 0 && !s_screen_asleep &&
+                now_ms - s_last_activity_ms >= s_screen_timeout_s * 1000UL) {
+            sleep_screen();
+        }
+
+        /* 自动轮播：应用内每隔 N 秒自动切换到下一个用户应用（0=关闭）。
+         * 菜单/系统页不轮播；休眠时暂停。 */
+        if (s_ui != UI_APP || s_screen_asleep || s_app_count <= 1) {
+            s_last_rotate_ms = now_ms;
+        } else if (s_auto_rotate_s > 0 &&
+                   now_ms - s_last_rotate_ms >= s_auto_rotate_s * 1000UL) {
+            s_last_rotate_ms = now_ms;
+            s_current_app = (s_current_app + 1) % s_app_count;
+            s_force_redraw = true;
+        }
 
         /* 光敏自动亮度：每秒采样一次，按光照度映射亮度；传感器未接则跳过 */
         if (s_auto_brightness && now_ms - s_last_light_ms >= 1000) {
@@ -469,6 +545,9 @@ void app_main(void)
         bool need_render = s_force_redraw;
         if (s_ui == UI_APP) {
             need_render = need_render || any_fetched;
+        }
+        if (s_screen_asleep) {
+            need_render = false; /* 背光熄灭时跳过画布渲染，省 CPU */
         }
         if (need_render) {
             s_force_redraw = false;

@@ -130,6 +130,8 @@ char *config_to_json(const app_config_t *cfg)
     cJSON_AddStringToObject(root, "password", cfg->password);
     cJSON_AddNumberToObject(root, "brightness", cfg->brightness);
     cJSON_AddBoolToObject(root, "auto_brightness", cfg->auto_brightness);
+    cJSON_AddNumberToObject(root, "screen_timeout_s", cfg->screen_timeout_s);
+    cJSON_AddNumberToObject(root, "auto_rotate_s", cfg->auto_rotate_s);
     cJSON_AddBoolToObject(root, "buzzer_enabled", cfg->buzzer_enabled);
     cJSON_AddNumberToObject(root, "buzzer_volume", cfg->buzzer_volume);
 
@@ -259,6 +261,15 @@ esp_err_t config_from_json(const char *json, app_config_t *cfg)
     v = cJSON_GetObjectItem(root, "auto_brightness");
     if (cJSON_IsBool(v)) {
         cfg->auto_brightness = cJSON_IsTrue(v);
+    }
+
+    v = cJSON_GetObjectItem(root, "screen_timeout_s");
+    if (cJSON_IsNumber(v) && v->valueint >= 0) {
+        cfg->screen_timeout_s = (uint32_t)v->valueint;
+    }
+    v = cJSON_GetObjectItem(root, "auto_rotate_s");
+    if (cJSON_IsNumber(v) && v->valueint >= 0) {
+        cfg->auto_rotate_s = (uint32_t)v->valueint;
     }
 
     v = cJSON_GetObjectItem(root, "buzzer_enabled");

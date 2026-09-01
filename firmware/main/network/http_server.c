@@ -14,6 +14,7 @@
 #include "app_config.h"
 #include "data_fetcher.h"
 #include "field_parser.h"
+#include "version.h"
 #include "web_assets.h"
 #include "wifi_manager.h"
 
@@ -256,6 +257,8 @@ static esp_err_t api_get_status(httpd_req_t *req)
     cJSON_AddStringToObject(root, "device_name", cfg.device_name);
     cJSON_AddBoolToObject(root, "wifi_connected", wifi_manager_is_connected());
     cJSON_AddStringToObject(root, "ip", ip);
+    cJSON_AddNumberToObject(root, "rssi", wifi_manager_get_rssi());
+    cJSON_AddStringToObject(root, "firmware_version", FW_VERSION);
     cJSON_AddNumberToObject(root, "uptime_ms", esp_timer_get_time() / 1000);
     char *out = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);

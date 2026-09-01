@@ -86,6 +86,8 @@ typedef struct {
     char     password[CONFIG_PASS_MAX];
     uint8_t  brightness;                      /* 屏幕亮度 0-100 */
     bool     auto_brightness;                 /* 光敏自动调节屏幕亮度 */
+    uint32_t screen_timeout_s;                /* 无操作后屏幕休眠秒数，0=关闭 */
+    uint32_t auto_rotate_s;                   /* 应用自动轮播间隔秒数，0=关闭 */
     bool     buzzer_enabled;                  /* 蜂鸣器开关 */
     uint8_t  buzzer_volume;                   /* 蜂鸣音量 0-100 */
     uint32_t interface_count;

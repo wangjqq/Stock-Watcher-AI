@@ -56,6 +56,8 @@ export interface AppConfig {
   password: string
   brightness: number
   auto_brightness: boolean
+  screen_timeout_s: number
+  auto_rotate_s: number
   buzzer_enabled: boolean
   buzzer_volume: number
   interfaces: DataInterface[]
@@ -84,5 +86,7 @@ export interface DeviceStatus {
   device_name: string
   wifi_connected: boolean
   ip: string
+  rssi: number
+  firmware_version: string
   uptime_ms: number
 }
