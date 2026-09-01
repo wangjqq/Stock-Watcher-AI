@@ -8,8 +8,11 @@ static const char *TAG = "led";
 /* ------------------------------------------------------------------
  * 接线（与 PINMAP.md 保持一致）：三引脚 RGB LED
  *  默认共阴极（高电平点亮）。若为共阳极，把 LED_ACTIVE_HIGH 改为 0。
+ *
+ * 注意：目标芯片 ESP32-S3 N16R8（Octal PSRAM）占用 GPIO26~37，
+ *       R 通道避开该区间使用 GPIO38。
  * ------------------------------------------------------------------ */
-#define LED_GPIO_R GPIO_NUM_33
+#define LED_GPIO_R GPIO_NUM_38
 #define LED_GPIO_G GPIO_NUM_21
 #define LED_GPIO_B GPIO_NUM_22
 

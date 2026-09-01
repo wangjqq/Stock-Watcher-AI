@@ -12,14 +12,17 @@ static const char *TAG = "light";
  * 光敏传感器 BH1750（I2C，环境光照度 0~65535 lux）
  *
  * 接线（与 PINMAP.md 保持一致）：
- *   VCC → 3V3   GND → GND   SDA → GPIO32   SCL → GPIO19
+ *   VCC → 3V3   GND → GND   SDA → GPIO8   SCL → GPIO10
  *   （模块一般自带 I2C 上拉电阻；ADDR 悬空则地址为 0x23）
  *
- * 说明：I2C 总线由本模块初始化（I2C_NUM_0），后续其他 I2C 传感器复用同一总线。
+ * 说明：
+ *   - I2C 总线由本模块初始化（I2C_NUM_0），后续其他 I2C 传感器复用同一总线。
+ *   - 目标芯片 ESP32-S3 N16R8（Octal PSRAM）占用 GPIO26~37，
+ *     SDA/SCL 避开该区间使用 GPIO8/10（由 GPIO matrix 任意映射）。
  * ------------------------------------------------------------------ */
 #define I2C_NUM        I2C_NUM_0
-#define PIN_SDA        GPIO_NUM_32
-#define PIN_SCL        GPIO_NUM_19
+#define PIN_SDA        GPIO_NUM_8
+#define PIN_SCL        GPIO_NUM_10
 #define I2C_FREQ_HZ    100000
 
 #define BH1750_ADDR    0x23   /* ADDR 低电平（悬空/接地）默认地址 */

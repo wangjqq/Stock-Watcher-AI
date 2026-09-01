@@ -78,7 +78,7 @@ static void wake_screen(void); /* 供 check_alerts 在告警触发时唤醒屏�
 /* 电源管理：让 CPU 空闲时自动降频（需 CONFIG_PM_ENABLE，未启用则静默忽略） */
 static void pm_init(void)
 {
-    esp_pm_config_esp32_t pm = {
+    esp_pm_config_esp32s3_t pm = {
         .max_freq_mhz = 240,
         .min_freq_mhz = 80,
         .light_sleep_enable = false,

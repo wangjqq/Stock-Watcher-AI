@@ -13,10 +13,13 @@ static const char *TAG = "knob";
  *   SW       旋钮按下 = 确认（内部上拉，按下为低）
  *   BACK     返回键（内部上拉，按下为低）
  * EC11 与 E8H6 等旋钮原理相同（正交相位 + 内置按下开关），驱动通用。
+ *
+ * 注意：目标芯片 ESP32-S3 N16R8（Octal PSRAM）占用 GPIO26~37，
+ *       旋钮 B/SW 避开该区间使用 GPIO6/7。
  * ------------------------------------------------------------------ */
 #define KNOB_GPIO_A    GPIO_NUM_25
-#define KNOB_GPIO_B    GPIO_NUM_26
-#define KNOB_GPIO_SW   GPIO_NUM_27
+#define KNOB_GPIO_B    GPIO_NUM_6
+#define KNOB_GPIO_SW   GPIO_NUM_7
 #define KNOB_GPIO_BACK GPIO_NUM_14
 
 #define ACTIVE_LEVEL   0   /* 按下/闭合 = 低电平 */
