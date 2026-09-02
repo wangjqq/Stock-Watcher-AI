@@ -127,7 +127,7 @@ static void cal_load(void)
     s_cal.valid = false;
     nvs_handle_t h;
     if (nvs_open(CAL_NVS_NS, NVS_READONLY, &h) == ESP_OK) {
-        uint32_t len = sizeof(s_cal);
+        size_t len = sizeof(s_cal);
         if (nvs_get_blob(h, CAL_NVS_KEY, &s_cal, &len) == ESP_OK && len == sizeof(s_cal) && s_cal.valid) {
             ESP_LOGI(TAG, "cal loaded (x:%d..%d y:%d..%d)", s_cal.x_tl, s_cal.x_br, s_cal.y_tl, s_cal.y_br);
         } else {

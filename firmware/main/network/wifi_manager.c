@@ -4,6 +4,7 @@
 
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "mdns.h"
@@ -17,6 +18,15 @@ static int      s_last_reason = 0;        /* 最近一次断开原因（0=无）
 static char     s_applied_ssid[CONFIG_SSID_MAX] = "";
 static char     s_applied_pass[CONFIG_PASS_MAX] = "";
 static bool     s_scan_done = false;      /* 最近一次扫描是否已完成 */
+static char     s_ap_ssid[33] = "";       /* SoftAP 热点名（含 MAC 尾号） */
+
+/* 生成 SoftAP 热点名：StockWatcher-<MAC 后两字节>，避免同型号设备重名 */
+static void ap_ssid_gen(void)
+{
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+    snprintf(s_ap_ssid, sizeof(s_ap_ssid), "StockWatcher-%02X%02X", mac[4], mac[5]);
+}
 
 static void event_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
@@ -47,8 +57,9 @@ static void event_handler(void *arg, esp_event_base_t base, int32_t id, void *da
     }
 }
 
-/* 纯 STA：配置并启动 WiFi。ssid 为空则待机（不连接），由设备端 WiFi 页配置 */
-static esp_err_t sta_setup(const char *ssid, const char *password)
+/* STA + SoftAP 并存：STA 连外部网络，SoftAP 开放无密码热点供临时访问配置页。
+ * ssid 为空则 STA 待机（不连接），由设备端 WiFi 页配置。 */
+static esp_err_t net_setup(const char *ssid, const char *password)
 {
     s_connected = false;
     s_last_reason = 0;
@@ -68,8 +79,16 @@ static esp_err_t sta_setup(const char *ssid, const char *password)
     }
     s_sta_configured = (sta.sta.ssid[0] != '\0');
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    /* SoftAP：无密码开放热点，名称含 MAC 尾号避免重名 */
+    wifi_config_t ap = { 0 };
+    strlcpy((char *)ap.ap.ssid, s_ap_ssid, sizeof(ap.ap.ssid));
+    ap.ap.ssid_len = (uint8_t)strlen(s_ap_ssid);
+    ap.ap.max_connection = 4;
+    ap.ap.authmode = WIFI_AUTH_OPEN;
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));
     err = esp_wifi_start();
     if (err == ESP_OK && s_sta_configured) {
         ESP_LOGI(TAG, "sta connect to %s", ssid);
@@ -82,6 +101,7 @@ esp_err_t wifi_manager_init(const app_config_t *cfg)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();
+    esp_netif_create_default_wifi_ap(); /* SoftAP 网卡：默认 IP 192.168.4.1，自动启 DHCP */
 
     wifi_init_config_t wifi_cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&wifi_cfg));
@@ -89,7 +109,8 @@ esp_err_t wifi_manager_init(const app_config_t *cfg)
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL));
 
-    esp_err_t err = sta_setup(cfg->ssid, cfg->password);
+    ap_ssid_gen();
+    esp_err_t err = net_setup(cfg->ssid, cfg->password);
     strlcpy(s_applied_ssid, cfg->ssid, sizeof(s_applied_ssid));
     strlcpy(s_applied_pass, cfg->password, sizeof(s_applied_pass));
     return err;
@@ -102,7 +123,7 @@ esp_err_t wifi_manager_apply_config(const app_config_t *cfg)
             strcmp(s_applied_pass, cfg->password) == 0) {
         return ESP_OK; /* WiFi 配置没变，保持当前连接 */
     }
-    esp_err_t err = sta_setup(cfg->ssid, cfg->password);
+    esp_err_t err = net_setup(cfg->ssid, cfg->password);
     strlcpy(s_applied_ssid, cfg->ssid, sizeof(s_applied_ssid));
     strlcpy(s_applied_pass, cfg->password, sizeof(s_applied_pass));
     return err;
@@ -111,7 +132,7 @@ esp_err_t wifi_manager_apply_config(const app_config_t *cfg)
 /* 设备端 WiFi 页手动连接：只切换连接，不改配置（配置由 main.c 负责写 NVS） */
 esp_err_t wifi_manager_connect(const char *ssid, const char *password)
 {
-    esp_err_t err = sta_setup(ssid, password);
+    esp_err_t err = net_setup(ssid, password);
     if (err == ESP_OK) {
         strlcpy(s_applied_ssid, ssid, sizeof(s_applied_ssid));
         strlcpy(s_applied_pass, password, sizeof(s_applied_pass));
@@ -191,12 +212,16 @@ int wifi_manager_last_disconnect_reason(void)
 
 const char *wifi_manager_connected_ssid(void)
 {
+    static char s_ssid[33];
     if (!s_connected) {
         return "";
     }
     wifi_ap_record_t ap;
     if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
-        return (const char *)ap.ssid;
+        /* ap.ssid 是栈上局部数组，必须拷贝到静态缓冲再返回 */
+        memcpy(s_ssid, ap.ssid, sizeof(ap.ssid));
+        s_ssid[sizeof(ap.ssid)] = '\0';
+        return s_ssid;
     }
     return "";
 }
@@ -204,4 +229,22 @@ const char *wifi_manager_connected_ssid(void)
 void wifi_manager_ip_str(char *out, size_t out_size)
 {
     strlcpy(out, s_ip, out_size);
+}
+
+/* 返回 SoftAP 热点名（如 StockWatcher-A1B2） */
+const char *wifi_manager_ap_ssid(void)
+{
+    return s_ap_ssid;
+}
+
+/* 返回 SoftAP 自身 IP（默认 192.168.4.1），写入 out */
+void wifi_manager_ap_ip_str(char *out, size_t out_size)
+{
+    esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    esp_netif_ip_info_t ip;
+    if (ap && esp_netif_get_ip_info(ap, &ip) == ESP_OK) {
+        snprintf(out, out_size, IPSTR, IP2STR(&ip.ip));
+    } else {
+        strlcpy(out, "", out_size);
+    }
 }

@@ -1,7 +1,7 @@
 #include "battery.h"
 
-#include "driver/adc.h"
 #include "driver/gpio.h"
+#include "esp_adc/adc_oneshot.h"
 #include "esp_log.h"
 
 static const char *TAG = "batt";
@@ -19,35 +19,49 @@ static const char *TAG = "batt";
  *     ADC_ATTEN_DB_12 下约为 0~3.1V，所以必须用分压电阻把电池电压折半再采样。
  *   - 若你的分压比不同，改 BATTERY_DIVIDER；电量 0%/100% 对应电压改 MIN/MAX。
  * ------------------------------------------------------------------ */
-#define PIN_BATT        ADC1_CHANNEL_0 /* GPIO1 */
+#define PIN_BATT        ADC_CHANNEL_0 /* GPIO1 */
 
 #define BATTERY_DIVIDER 2.0f   /* 电池电压 = 采样电压 × 分压比 */
 #define BATT_MIN_V      3.0f   /* 0% 对应电压 */
 #define BATT_MAX_V      4.2f   /* 100% 对应电压（满电） */
 #define SAMPLE_CNT      16     /* 每次采样取平均的 ADC 读数个数 */
 
+static adc_oneshot_unit_handle_t s_adc = NULL;
 static int32_t s_filtered = -1; /* -1 表示尚未初始化平滑值 */
 
 void battery_init(void)
 {
-    adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(PIN_BATT, ADC_ATTEN_DB_12);
+    adc_oneshot_unit_init_cfg_t unit_cfg = {
+        .unit_id = ADC_UNIT_1,
+        .clk_src = ADC_DIGI_CLK_SRC_DEFAULT,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&unit_cfg, &s_adc));
+
+    adc_oneshot_chan_cfg_t chan_cfg = {
+        .atten = ADC_ATTEN_DB_12,
+        .bitwidth = ADC_BITWIDTH_12,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc, PIN_BATT, &chan_cfg));
     ESP_LOGI(TAG, "init ok (ADC1_CH%d)", PIN_BATT);
 }
 
 uint8_t battery_get_percent(void)
 {
     uint32_t sum = 0;
+    int raw;
     for (int i = 0; i < SAMPLE_CNT; i++) {
-        sum += adc1_get_raw(PIN_BATT);
+        if (adc_oneshot_read(s_adc, PIN_BATT, &raw) == ESP_OK) {
+            sum += (uint32_t)raw;
+        }
     }
-    int32_t raw = (int32_t)(sum / SAMPLE_CNT);
+    int32_t avg = (int32_t)(sum / SAMPLE_CNT);
 
     /* 指数平滑，避免状态栏电量每秒抖动 */
     if (s_filtered < 0) {
-        s_filtered = raw;
+        s_filtered = avg;
     } else {
-        s_filtered = (s_filtered * 7 + raw) / 8;
+        s_filtered = (s_filtered * 7 + avg) / 8;
     }
 
     /* ADC(12bit, 0~3.1V@DB12) → 采样电压(mV) → 电池电压(mV) → 电量百分比 */

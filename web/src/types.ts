@@ -87,6 +87,8 @@ export interface DeviceStatus {
   wifi_connected: boolean
   ip: string
   rssi: number
+  ap_ssid: string
+  ap_ip: string
   firmware_version: string
   uptime_ms: number
 }

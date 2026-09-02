@@ -52,7 +52,16 @@ idf_component_register(
         esp_http_server
         esp_http_client
         esp_timer
+        esp_pm
         json
         mdns
         driver
+        esp_driver_spi
+        esp_driver_gpio
+        esp_driver_ledc
+        esp_adc
+        app_update
+        esp_partition
+        heap
+        lwip
 )

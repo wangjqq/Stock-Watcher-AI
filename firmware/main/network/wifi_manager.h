@@ -4,9 +4,9 @@
 #include "esp_err.h"
 #include "esp_wifi.h"
 
-/* 初始化 Wi-Fi（纯 STA，无 AP 配网）：
- * - 配置里已有 ssid → 连接该网络
- * - 否则 → STA 待机（不连接），等待设备端「系统 → WiFi」页手动配置 */
+/* 初始化 Wi-Fi（STA + SoftAP 并存）：
+ * - 配置里已有 ssid → STA 连接该网络；否则 → STA 待机，等待设备端「系统 → WiFi」页手动配置
+ * - 同时始终开放 SoftAP 无密码热点（StockWatcher-XXXX），连上热点后经 192.168.4.1 访问配置页 */
 esp_err_t wifi_manager_init(const app_config_t *cfg);
 
 /* 配置变化后调用：ssid 或 password 变化时重新配置并重连（无需重启），未变化则无操作 */
@@ -48,3 +48,9 @@ const char *wifi_manager_connected_ssid(void);
 
 /* 返回当前 IP 字符串（未连接返回空串），写入 out */
 void wifi_manager_ip_str(char *out, size_t out_size);
+
+/* 返回 SoftAP 热点名（如 StockWatcher-A1B2，无密码） */
+const char *wifi_manager_ap_ssid(void);
+
+/* 返回 SoftAP 自身 IP（默认 192.168.4.1），写入 out */
+void wifi_manager_ap_ip_str(char *out, size_t out_size);

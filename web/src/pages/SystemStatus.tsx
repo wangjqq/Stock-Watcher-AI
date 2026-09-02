@@ -81,6 +81,17 @@ export default function SystemStatus() {
           <Descriptions.Item label="刷新">{st ? '每 5 秒自动更新' : '-'}</Descriptions.Item>
         </Descriptions>
       </Card>
+
+      <Card title="AP 热点（SoftAP）" style={{ marginTop: 16 }}>
+        <Descriptions column={2} bordered size="small">
+          <Descriptions.Item label="热点名">{st?.ap_ssid || '-'}</Descriptions.Item>
+          <Descriptions.Item label="访问地址">
+            {st?.ap_ip ? `http://${st.ap_ip}` : '-'}
+          </Descriptions.Item>
+          <Descriptions.Item label="密码">无（开放网络）</Descriptions.Item>
+          <Descriptions.Item label="说明">手机/电脑连接该热点后，即可访问配置页</Descriptions.Item>
+        </Descriptions>
+      </Card>
     </div>
   )
 }

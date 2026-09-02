@@ -24,7 +24,7 @@ static const char *TAG = "http";
 /* 接口测试原始数据缓存（栈上数组，保持较小） */
 #define BODY_MAX 4096
 /* 配置 JSON body 上限（保存 / 导入导出完整配置可能较大，read_body 用 malloc 读入） */
-#define CONFIG_BODY_MAX 16384
+#define CFG_JSON_BODY_MAX 16384
 #define RAW_SHOW_MAX 500
 
 /* 最近一次接口测试的解析结果（供字段选择页使用） */
@@ -36,7 +36,7 @@ static char s_last_raw[RAW_SHOW_MAX + 1];
 static char *read_body(httpd_req_t *req)
 {
     int len = req->content_len;
-    if (len <= 0 || len > CONFIG_BODY_MAX) {
+    if (len <= 0 || len > CFG_JSON_BODY_MAX) {
         return NULL;
     }
     char *buf = malloc(len + 1);
@@ -103,12 +103,17 @@ static esp_err_t handle_404(httpd_req_t *req)
 
 static esp_err_t api_get_config(httpd_req_t *req)
 {
-    app_config_t cfg;
-    config_load(&cfg);
-    char *json = config_to_json(&cfg);
+    /* cfg 约 60KB，httpd 任务栈只有几 KB，必须堆分配 */
+    app_config_t *cfg = malloc(sizeof(app_config_t));
+    if (!cfg) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no mem");
+    }
+    config_load(cfg);
+    char *json = config_to_json(cfg);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, json ? json : "{}");
     free(json);
+    free(cfg);
     return ESP_OK;
 }
 
@@ -118,18 +123,26 @@ static esp_err_t api_post_config(httpd_req_t *req)
     if (!body) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad body");
     }
-    app_config_t cfg;
-    config_load(&cfg);
-    esp_err_t err = config_from_json(body, &cfg);
+    /* cfg 约 60KB，httpd 任务栈只有几 KB，必须堆分配 */
+    app_config_t *cfg = malloc(sizeof(app_config_t));
+    if (!cfg) {
+        free(body);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no mem");
+    }
+    config_load(cfg);
+    esp_err_t err = config_from_json(body, cfg);
     free(body);
     if (err != ESP_OK) {
+        free(cfg);
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
     }
-    err = config_save(&cfg);
+    err = config_save(cfg);
     if (err != ESP_OK) {
+        free(cfg);
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "save failed");
     }
-    wifi_manager_apply_config(&cfg); /* WiFi 配置变化时自动重连，无需重启 */
+    wifi_manager_apply_config(cfg); /* WiFi 配置变化时自动重连，无需重启 */
+    free(cfg);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"ok\":true}");
     ESP_LOGI(TAG, "config saved");
@@ -252,16 +265,24 @@ static esp_err_t api_get_fields(httpd_req_t *req)
 
 static esp_err_t api_get_status(httpd_req_t *req)
 {
-    app_config_t cfg;
-    config_load(&cfg);
+    /* cfg 约 60KB，httpd 任务栈只有几 KB，必须堆分配 */
+    app_config_t *cfg = malloc(sizeof(app_config_t));
+    if (!cfg) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no mem");
+    }
+    config_load(cfg);
     char ip[32];
     wifi_manager_ip_str(ip, sizeof(ip));
+    char ap_ip[32];
+    wifi_manager_ap_ip_str(ap_ip, sizeof(ap_ip));
 
     cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "device_name", cfg.device_name);
+    cJSON_AddStringToObject(root, "device_name", cfg->device_name);
     cJSON_AddBoolToObject(root, "wifi_connected", wifi_manager_is_connected());
     cJSON_AddStringToObject(root, "ip", ip);
     cJSON_AddNumberToObject(root, "rssi", wifi_manager_get_rssi());
+    cJSON_AddStringToObject(root, "ap_ssid", wifi_manager_ap_ssid());
+    cJSON_AddStringToObject(root, "ap_ip", ap_ip);
     cJSON_AddStringToObject(root, "firmware_version", FW_VERSION);
     cJSON_AddNumberToObject(root, "uptime_ms", esp_timer_get_time() / 1000);
     char *out = cJSON_PrintUnformatted(root);
@@ -269,6 +290,7 @@ static esp_err_t api_get_status(httpd_req_t *req)
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, out ? out : "{}");
     free(out);
+    free(cfg);
     return ESP_OK;
 }
 

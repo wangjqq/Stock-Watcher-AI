@@ -53,7 +53,7 @@ void status_bar_draw(void)
         uint32_t up_ms = (uint32_t)(esp_timer_get_time() / 1000);
         uint32_t h = up_ms / 3600000;
         uint32_t m = (up_ms / 60000) % 60;
-        snprintf(time_str, sizeof(time_str), "U%02d:%02d", h, m);
+        snprintf(time_str, sizeof(time_str), "U%02d:%02d", (int)h, (int)m);
     }
 
     display_draw_status_bar(time_str, wifi_manager_get_rssi(), battery_get_percent(), s_left_w);

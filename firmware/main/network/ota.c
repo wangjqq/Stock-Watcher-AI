@@ -22,7 +22,7 @@ static esp_err_t handle_ota(httpd_req_t *req)
              upd->label, (unsigned long)upd->address, (unsigned long)req->content_len);
 
     esp_ota_handle_t h;
-    esp_err_t err = esp_ota_begin(upd, OTA_WITHOUT_SIZE, &h);
+    esp_err_t err = esp_ota_begin(upd, OTA_SIZE_UNKNOWN, &h);
     if (err != ESP_OK) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
     }

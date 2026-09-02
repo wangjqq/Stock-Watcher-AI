@@ -50,6 +50,11 @@ const sections = [
           设备「系统 → QR」页扫码直达。
         </Paragraph>
         <Paragraph>
+          <Text strong>无 Wi-Fi 时（AP 热点）：</Text>
+          设备始终开放 <Text code>StockWatcher-XXXX</Text> 无密码热点（热点名见「系统状态」页）。手机/电脑连接
+          该热点后，访问 <Text code>http://192.168.4.1</Text> 即可打开管理页。
+        </Paragraph>
+        <Paragraph>
           <Text strong>3. 配置流程：</Text>
           接口配置 → 测试接口 → 字段解析 → 选择字段 → 屏幕布局 → 保存。设备随即按配置自动刷新显示，重启后配置不丢失。
         </Paragraph>

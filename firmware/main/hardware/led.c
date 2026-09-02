@@ -1,5 +1,6 @@
 #include "led.h"
 
+#include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "esp_log.h"
 
@@ -14,7 +15,7 @@ static const char *TAG = "led";
  * ------------------------------------------------------------------ */
 #define LED_GPIO_R GPIO_NUM_38
 #define LED_GPIO_G GPIO_NUM_21
-#define LED_GPIO_B GPIO_NUM_22
+#define LED_GPIO_B GPIO_NUM_42   /* 原 GPIO22 在 S3 上不存在，已改至 GPIO42 */
 
 #define LED_ACTIVE_HIGH 1
 

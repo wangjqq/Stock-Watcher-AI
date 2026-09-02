@@ -415,7 +415,8 @@ void wifi_ui_enter(void)
     s_edit_ssid = false;
 
     /* 快照当前已保存的 WiFi 配置（连接失败时恢复） */
-    app_config_t cfg;
+    /* cfg 约 60KB，main_task 栈仅 3.5KB，须 static 存于 .bss（wifi_ui 为单实例） */
+    static app_config_t cfg;
     config_load(&cfg);
     strlcpy(s_prev_ssid, cfg.ssid, sizeof(s_prev_ssid));
     strlcpy(s_prev_pass, cfg.password, sizeof(s_prev_pass));
@@ -478,7 +479,8 @@ void wifi_ui_tick(void)
         s_conn_state = CONN_OK;
         s_result_until_ms = now + 1500;
         mark_dirty();
-        app_config_t cfg;
+        /* cfg 约 60KB，main_task 栈仅 3.5KB，须 static 存于 .bss（wifi_ui 为单实例） */
+        static app_config_t cfg;
         config_load(&cfg);
         strlcpy(cfg.ssid, s_target_ssid, sizeof(cfg.ssid));
         strlcpy(cfg.password, s_pass_buf, sizeof(cfg.password));

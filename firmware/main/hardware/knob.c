@@ -17,7 +17,7 @@ static const char *TAG = "knob";
  * 注意：目标芯片 ESP32-S3 N16R8（Octal PSRAM）占用 GPIO26~37，
  *       旋钮 B/SW 避开该区间使用 GPIO6/7。
  * ------------------------------------------------------------------ */
-#define KNOB_GPIO_A    GPIO_NUM_25
+#define KNOB_GPIO_A    GPIO_NUM_47   /* 原 GPIO25 在 S3 上不存在，已改至 GPIO47 */
 #define KNOB_GPIO_B    GPIO_NUM_6
 #define KNOB_GPIO_SW   GPIO_NUM_7
 #define KNOB_GPIO_BACK GPIO_NUM_14

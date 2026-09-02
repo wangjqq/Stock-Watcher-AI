@@ -66,6 +66,7 @@ void app_ui_draw_menu(const char names[][CONFIG_NAME_MAX], int count, int cursor
 
 void app_ui_draw_system(int view, int cursor, uint8_t brightness, bool auto_brightness,
                         bool wifi_ok, int rssi, const char *ip,
+                        const char *ap_ssid, const char *ap_ip,
                         const char *version, bool refreshing)
 {
     clear_canvas();
@@ -119,12 +120,19 @@ void app_ui_draw_system(int view, int cursor, uint8_t brightness, bool auto_brig
         display_draw_text(4, STATUS_BAR_HEIGHT + 4, "Status", 8, COL_TITLE);
 
         char line[64];
-        int y = STATUS_BAR_HEIGHT + 20;
+        int y = STATUS_BAR_HEIGHT + 18;
         display_draw_text(8, y, "IP", 8, COL_DIM);
-        y += 16;
+        y += 14;
         display_draw_text(8, y, (ip && ip[0]) ? ip : "-", 8, COL_FG);
         y += 16;
         snprintf(line, sizeof(line), "RSSI: %d dBm", rssi);
+        display_draw_text(8, y, line, 8, COL_FG);
+        y += 16;
+        display_draw_text(8, y, "AP hotspot", 8, COL_DIM);
+        y += 14;
+        display_draw_text(8, y, ap_ssid ? ap_ssid : "-", 8, COL_FG);
+        y += 16;
+        snprintf(line, sizeof(line), "AP IP: %s", (ap_ip && ap_ip[0]) ? ap_ip : "-");
         display_draw_text(8, y, line, 8, COL_FG);
         y += 16;
         snprintf(line, sizeof(line), "Ver: %s", version ? version : "-");
@@ -213,22 +221,22 @@ static const char *const s_manual_pages[MANUAL_PAGES][MANUAL_LINES] = {
     },
     {
         "== CONFIG ==",
-        "1 Open web page:",
+        "Web page (same WiFi):",
         "   http://stockwatcher.",
-        "   local (same WiFi)",
-        "2 Add API url in web:",
-        "   Interface config",
-        "3 Test, pick fields,",
-        "   drag layout, save",
-        "4 Device fetches data",
-        "   per refresh interval",
+        "   local or device IP",
+        "AP hotspot (no WiFi):",
+        "   join StockWatcher-",
+        "   XXXX -> 192.168.4.1",
+        "Then: add API url,",
+        "test, pick fields,",
+        "drag layout, save",
         "Multi-stock supported",
     },
     {
         "== SYSTEM MENU ==",
         "Brightness: knob set",
         "Refresh: fetch now",
-        "Status: IP / RSSI / Ver",
+        "Status: IP/RSSI/AP/Ver",
         "WiFi: join network",
         "QR: scan -> web page",
         "TouchCal: calibrate if",

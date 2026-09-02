@@ -20,6 +20,7 @@
 #include "indicator.h"
 #include "knob.h"
 #include "layout_renderer.h"
+#include "led.h"
 #include "light_sensor.h"
 #include "selftest.h"
 #include "status_bar.h"
@@ -83,7 +84,7 @@ static void wake_screen(void); /* 供 check_alerts 在告警触发时唤醒屏�
 /* 电源管理：让 CPU 空闲时自动降频（需 CONFIG_PM_ENABLE，未启用则静默忽略） */
 static void pm_init(void)
 {
-    esp_pm_config_esp32s3_t pm = {
+    esp_pm_config_t pm = {
         .max_freq_mhz = 240,
         .min_freq_mhz = 80,
         .light_sleep_enable = false,
@@ -132,7 +133,7 @@ static uint8_t lux_to_brightness(uint16_t lux)
 /* 条件提醒：仅在拉到新数据后调用。
  * 条件由「不满足 → 满足」时触发一次：蜂鸣 + LED 告警闪烁；
  * 条件恢复后复位，可再次触发。 */
-static void check_alerts(const app_config_t *cfg, const char *const *bodies, const bool *has_body)
+static void check_alerts(const app_config_t *cfg, const char (*bodies)[FETCH_BUF_SIZE], const bool *has_body)
 {
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
 
@@ -150,7 +151,7 @@ static void check_alerts(const app_config_t *cfg, const char *const *bodies, con
                 break;
             }
         }
-        if (idx < 0 || !has_body || !has_body[idx] || !bodies || !bodies[idx] ||
+        if (idx < 0 || !has_body || !has_body[idx] ||
                 strlen(bodies[idx]) == 0) {
             continue; /* 数据源缺失或数据未就绪 */
         }
@@ -596,10 +597,12 @@ static void render_canvas(const app_config_t *cfg)
         }
         char ip[32];
         wifi_manager_ip_str(ip, sizeof(ip));
+        char ap_ip[32];
+        wifi_manager_ap_ip_str(ap_ip, sizeof(ap_ip));
         bool refreshing = (uint32_t)(esp_timer_get_time() / 1000) < s_refresh_feedback_ms;
         app_ui_draw_system(s_sys, (int)s_sys_cursor, s_brightness, s_auto_brightness,
                            wifi_manager_is_connected(), wifi_manager_get_rssi(),
-                           ip, FW_VERSION, refreshing);
+                           ip, wifi_manager_ap_ssid(), ap_ip, FW_VERSION, refreshing);
         return;
     }
 }
@@ -613,7 +616,8 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    app_config_t cfg;
+    /* cfg 约 60KB，若放栈上会溢出 3.5KB 的 main_task 栈，须用 static 存于 .bss */
+    static app_config_t cfg;
     config_load(&cfg);
 
     /* 界面会话初始状态：亮度取配置，开机默认进入第一个应用 */

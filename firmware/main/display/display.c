@@ -24,7 +24,7 @@ static const char *TAG = "ili9341";
  *  触摸屏 T_DO 接 MISO（LCD 的 SDO 可不接，写屏无需读回）。
  * ------------------------------------------------------------------ */
 #define PIN_SCLK   GPIO_NUM_18
-#define PIN_MOSI   GPIO_NUM_23
+#define PIN_MOSI   GPIO_NUM_48   /* 原 GPIO23 在 S3 上不存在，已改至 GPIO48 */
 #define PIN_MISO   GPIO_NUM_11   /* 触摸屏 T_DO（触摸 SPI 读回，见 touch.c） */
 #define PIN_CS     GPIO_NUM_5
 #define PIN_DC     GPIO_NUM_17   /* A0 / 数据命令选择 */
@@ -144,8 +144,8 @@ static void ili9341_init(void)
 }
 
 /* ---------------- 背光（LEDC PWM，亮度 0-100） ---------------- */
-/* buzzer 用 TIMER_0/CH_0（低），led 用 TIMER_1/CH_1-3（低），背光独立用高模式 CH_4 */
-#define BL_LEDC_MODE    LEDC_HIGH_SPEED_MODE
+/* buzzer 用 TIMER_0/CH_0（低），led 用 TIMER_1/CH_1-3（低），背光独立用 CH_4（S3 仅低模式） */
+#define BL_LEDC_MODE    LEDC_LOW_SPEED_MODE
 #define BL_LEDC_TIMER   LEDC_TIMER_2
 #define BL_LEDC_CHANNEL LEDC_CHANNEL_4
 
@@ -519,7 +519,6 @@ static void draw_back_arrow(int cx, int cy)
 void display_draw_status_bar(const char *time_str, int rssi_dbm, int battery_pct, int left_w)
 {
     static const uint32_t FG = 0xFFFFFF;
-    static const uint32_t BAR_BG = 0x111111;
 
     fb_fill_rect(0, 0, DISPLAY_WIDTH, STATUS_BAR_HEIGHT, RGB565(0x11, 0x11, 0x11));
 
@@ -570,8 +569,8 @@ void display_update(void)
     uint8_t d[4] = { 0, 0, 0, DISPLAY_WIDTH - 1 };
     spi_send_data(d, 4);
     spi_send_cmd(0x2B); /* RASET */
-    d[2] = 0;
-    d[3] = DISPLAY_HEIGHT - 1;
+    d[2] = (uint8_t)((DISPLAY_HEIGHT - 1) >> 8);
+    d[3] = (uint8_t)(DISPLAY_HEIGHT - 1);
     spi_send_data(d, 4);
     spi_send_cmd(0x2C); /* RAMWR */
 
