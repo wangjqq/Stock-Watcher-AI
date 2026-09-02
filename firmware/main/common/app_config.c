@@ -52,8 +52,14 @@ esp_err_t config_save(const app_config_t *cfg)
         return err;
     }
     err = nvs_set_blob(h, "app_cfg", cfg, sizeof(*cfg));
-    if (err == ESP_OK) {
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "nvs set_blob failed (%u bytes): %s",
+                 (unsigned)sizeof(*cfg), esp_err_to_name(err));
+    } else {
         err = nvs_commit(h);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "nvs commit failed: %s", esp_err_to_name(err));
+        }
     }
     nvs_close(h);
     return err;

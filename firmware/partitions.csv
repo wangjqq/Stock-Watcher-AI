@@ -1,7 +1,8 @@
 # Name,   Type, SubType, Offset,    Size,     Flags
-nvs,      data, nvs,     0x9000,    0x6000,
-phy_init, data, phy,     0xf000,    0x1000,
-ota_0,    app,  ota_0,   0x10000,   0x600000,
-ota_1,    app,  ota_1,   0x610000,  0x600000,
-ota_data, data, ota,     0xC10000,  0x2000,
-fonts,    data, 0x82,    0xC13000,  0x80000,
+# nvs 扩到 256KB：app_config_t 约 63KB 以单个 blob 存入 NVS（NVS 内部开销大，128KB 实测仍不够）
+nvs,      data, nvs,     0x9000,    0x40000,
+phy_init, data, phy,     0x49000,   0x1000,
+ota_0,    app,  ota_0,   0x50000,   0x600000,
+ota_1,    app,  ota_1,   0x650000,  0x600000,
+ota_data, data, ota,     0xC50000,  0x2000,
+fonts,    data, 0x82,    0xC52000,  0x80000,

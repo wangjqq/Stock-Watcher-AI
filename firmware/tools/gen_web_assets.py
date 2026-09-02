@@ -20,6 +20,8 @@ MIME = {
 
 
 def mime_of(path: str) -> str:
+    if path == "/":  # 根路径 = index.html，扩展名取不到，需显式指定，否则浏览器会当作文件下载
+        return "text/html; charset=utf-8"
     return MIME.get(os.path.splitext(path)[1].lower(), "application/octet-stream")
 
 

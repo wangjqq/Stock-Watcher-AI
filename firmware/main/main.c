@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_partition.h"
 #include "esp_pm.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -615,6 +616,11 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+    /* 打印 NVS 分区实际大小，便于排查配置保存失败（配置 blob 约 60KB，分区太小会存不下） */
+    const esp_partition_t *nvs_part =
+        esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, "nvs");
+    ESP_LOGI("main", "nvs partition size: %u KB", nvs_part ? (unsigned)(nvs_part->size / 1024) : 0);
 
     /* cfg 约 60KB，若放栈上会溢出 3.5KB 的 main_task 栈，须用 static 存于 .bss */
     static app_config_t cfg;

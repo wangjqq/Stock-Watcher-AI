@@ -96,7 +96,7 @@ const sections = [
         </Paragraph>
         <Paragraph>
           <Text strong>系统状态：</Text>
-          查看设备 IP、信号强度、固件版本、网络状态。
+          查看设备 IP、信号强度、AP 热点名与访问地址、固件版本、网络状态。
         </Paragraph>
         <Paragraph>
           <Text strong>固件升级：</Text>

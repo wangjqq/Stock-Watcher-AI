@@ -415,11 +415,14 @@ void wifi_ui_enter(void)
     s_edit_ssid = false;
 
     /* 快照当前已保存的 WiFi 配置（连接失败时恢复） */
-    /* cfg 约 60KB，main_task 栈仅 3.5KB，须 static 存于 .bss（wifi_ui 为单实例） */
-    static app_config_t cfg;
-    config_load(&cfg);
-    strlcpy(s_prev_ssid, cfg.ssid, sizeof(s_prev_ssid));
-    strlcpy(s_prev_pass, cfg.password, sizeof(s_prev_pass));
+    /* cfg 约 60KB，不能放栈（main_task 栈仅 3.5KB）也不能放 .bss（会挤爆内部 RAM），须堆分配 */
+    app_config_t *cfg = malloc(sizeof(app_config_t));
+    if (cfg) {
+        config_load(cfg);
+        strlcpy(s_prev_ssid, cfg->ssid, sizeof(s_prev_ssid));
+        strlcpy(s_prev_pass, cfg->password, sizeof(s_prev_pass));
+        free(cfg);
+    }
 
     s_list_cursor = 0;
     s_list_top = 0;
@@ -479,12 +482,15 @@ void wifi_ui_tick(void)
         s_conn_state = CONN_OK;
         s_result_until_ms = now + 1500;
         mark_dirty();
-        /* cfg 约 60KB，main_task 栈仅 3.5KB，须 static 存于 .bss（wifi_ui 为单实例） */
-        static app_config_t cfg;
-        config_load(&cfg);
-        strlcpy(cfg.ssid, s_target_ssid, sizeof(cfg.ssid));
-        strlcpy(cfg.password, s_pass_buf, sizeof(cfg.password));
-        config_save(&cfg);
+        /* cfg 约 60KB，不能放栈（main_task 栈仅 3.5KB）也不能放 .bss（会挤爆内部 RAM），须堆分配 */
+        app_config_t *cfg = malloc(sizeof(app_config_t));
+        if (cfg) {
+            config_load(cfg);
+            strlcpy(cfg->ssid, s_target_ssid, sizeof(cfg->ssid));
+            strlcpy(cfg->password, s_pass_buf, sizeof(cfg->password));
+            config_save(cfg);
+            free(cfg);
+        }
         ESP_LOGI(TAG, "connected %s, saved", s_target_ssid);
         return;
     }

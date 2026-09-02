@@ -193,14 +193,22 @@ static esp_err_t api_test_interface(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no url");
     }
 
-    /* 按 body 构造测试请求：支持 method / headers / post_body */
-    interface_t it;
-    memset(&it, 0, sizeof(it));
-    it.method = REQ_GET;
-    strlcpy(it.url, u->valuestring, sizeof(it.url));
+    /* 按 body 构造测试请求：支持 method / headers / post_body
+     * it 约 1KB、raw 4KB，httpd 任务栈只有几 KB，须堆分配（否则栈溢出导致连接被重置） */
+    interface_t *it = malloc(sizeof(interface_t));
+    char *raw = malloc(BODY_MAX);
+    if (!it || !raw) {
+        free(raw);
+        free(it);
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no mem");
+    }
+    memset(it, 0, sizeof(*it));
+    it->method = REQ_GET;
+    strlcpy(it->url, u->valuestring, sizeof(it->url));
     cJSON *m = cJSON_GetObjectItem(root, "method");
     if (cJSON_IsNumber(m)) {
-        it.method = (http_method_t)m->valueint;
+        it->method = (http_method_t)m->valueint;
     }
     cJSON *hs = cJSON_GetObjectItem(root, "headers");
     if (cJSON_IsArray(hs)) {
@@ -211,18 +219,18 @@ static esp_err_t api_test_interface(httpd_req_t *req)
                 break;
             }
             if (cJSON_IsString(h) && h->valuestring[0] != '\0') {
-                strlcpy(it.headers[hi], h->valuestring, CONFIG_HEADER_LEN);
+                strlcpy(it->headers[hi], h->valuestring, CONFIG_HEADER_LEN);
                 hi++;
             }
         }
     }
     cJSON *pb = cJSON_GetObjectItem(root, "post_body");
     if (cJSON_IsString(pb)) {
-        strlcpy(it.post_body, pb->valuestring, sizeof(it.post_body));
+        strlcpy(it->post_body, pb->valuestring, sizeof(it->post_body));
     }
 
-    char raw[BODY_MAX];
-    esp_err_t err = data_fetch_iface(&it, raw, sizeof(raw), 5000);
+    esp_err_t err = data_fetch_iface(it, raw, BODY_MAX, 5000);
+    free(it);
 
     cJSON *resp = cJSON_CreateObject();
     cJSON_AddBoolToObject(resp, "ok", err == ESP_OK);
@@ -239,6 +247,7 @@ static esp_err_t api_test_interface(httpd_req_t *req)
         cJSON_AddStringToObject(resp, "error", esp_err_to_name(err));
     }
     cJSON_Delete(root);
+    free(raw);
 
     char *out = cJSON_PrintUnformatted(resp);
     cJSON_Delete(resp);
@@ -303,6 +312,9 @@ esp_err_t http_server_start(void)
     /* OTA 上传大固件需要更长的接收等待；handler 上限需容纳新增的 /api/ota */
     cfg.recv_wait_timeout = 30;
     cfg.max_uri_handlers = 16;
+    /* 默认栈 4KB 太小：接口测试等 handler 会调用 JSON 解析/HTTP 客户端，栈上稍大就溢出，
+     * 导致连接被重置，需扩大到 8KB */
+    cfg.stack_size = 8192;
 
     httpd_handle_t server = NULL;
     if (httpd_start(&server, &cfg) != ESP_OK) {
