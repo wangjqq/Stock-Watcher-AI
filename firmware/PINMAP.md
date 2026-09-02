@@ -19,36 +19,56 @@ N16R8 的 **8MB Octal PSRAM 与 Flash 通过 SPI 总线连接，占用 GPIO26~37
 
 ---
 
-## 屏幕：ST7735 1.8" 128x160（8pin）
+## 屏幕：ILI9341 2.4" 240x320 + 触摸（XPT2046）
 
-模块 8 个引脚：`VCC  GND  CS  RESET  DC  SDI(MOSI)  SCK  LED`
+模块引脚：`VCC  GND  CS  RESET  DC/RS  SDI(MOSI)  SCK  LED  SDO(MISO)`
+触摸引脚：`T_CLK  T_CS  T_DIN  T_DO  T_IRQ`
 
-| 模块引脚 | 功能 | ESP32 GPIO | 说明 |
+LCD 与触摸共用一条 SPI 总线（SPI2）：**T_CLK 与 SCK 连到同一个 GPIO，T_DIN 与 SDI(MOSI) 连到同一个 GPIO**。
+`T_DO` 接共享 MISO（**LCD 的 SDO 可以不接**，写屏无需读回）；触摸 T_CS 独立片选。
+
+| 模块引脚 | 功能 | ESP32 GPIO | 定义位置 |
 | ------- | ---- | ---------- | ---- |
 | VCC     | 电源 3.3V | 3V3      | 接开发板 3.3V |
 | GND     | 地 | GND       | 共地 |
-| CS      | 片选 | GPIO5    | `PIN_CS` |
+| CS      | LCD 片选 | GPIO5    | `display/display.c` → `PIN_CS` |
 | RESET   | 复位 | GPIO16   | `PIN_RST` |
-| DC      | 数据/命令 | GPIO17 | `PIN_DC`（也叫 A0） |
-| SDI     | 数据输入 | GPIO23  | `PIN_MOSI` |
+| DC      | 数据/命令 | GPIO17 | `PIN_DC`（也叫 RS/A0） |
+| SDI     | LCD 数据输入 | GPIO23 | `PIN_MOSI` |
 | SCK     | 时钟 | GPIO18    | `PIN_SCLK` |
 | LED     | 背光 | GPIO4     | `PIN_BL`，高电平点亮 |
+| SDO     | LCD 数据输出 | 悬空 | 写屏无需读回，可不接 |
+| T_CLK   | 触摸时钟 | GPIO18    | 与 SCK 共用 `PIN_SCLK` |
+| T_CS    | 触摸片选 | GPIO9    | `hardware/touch.c` → `TOUCH_PIN_CS` |
+| T_DIN   | 触摸数据输入 | GPIO23 | 与 MOSI 共用 `PIN_MOSI` |
+| T_DO    | 触摸数据输出 | GPIO11  | 共享 MISO，`display.c` → `PIN_MISO` |
+| T_IRQ   | 触摸中断 | GPIO15   | `hardware/touch.c` → `TOUCH_PIN_IRQ`，按下为低（内部上拉） |
 
 接线速查（模块引脚 → ESP32）：
 
 ```text
-VCC   → 3V3
-GND   → GND
-CS    → GPIO5
-RESET → GPIO16
-DC    → GPIO17
-SDI   → GPIO23
-SCK   → GPIO18
-LED   → GPIO4
+VCC    → 3V3
+GND    → GND
+CS     → GPIO5
+RESET  → GPIO16
+DC     → GPIO17
+SDI    → GPIO23
+SCK    → GPIO18
+LED    → GPIO4
+SDO    → 悬空（可不接）
+T_CLK  → GPIO18   （与 SCK 共用）
+T_CS   → GPIO9
+T_DIN  → GPIO23   （与 SDI 共用）
+T_DO   → GPIO11   （共享 MISO）
+T_IRQ  → GPIO15
 ```
 
-> 注：不同批次 ST7735 面板颜色/方向可能不同，若偏色或反色，参考
-> `display.c` 中 `st7735_init()` 末尾的注释（MADCTL / INVON 调整）。
+> 注：不同批次 ILI9341 面板颜色/方向可能不同，若偏色或反色，参考
+> `display.c` 中 `ili9341_init()` 末尾的注释（MADCTL / INVOFF 调整）。
+>
+> 触控为电阻式，首次使用需在「系统 → TouchCal」里做两角标定（点左上角、右下角），
+> 标定数据保存在 NVS。若触摸方向左右颠倒，重复标定即可；若 X/Y 轴互换（少见），
+> 需在 `touch.c` 的 `raw_to_screen()` 中交换两个通道。
 
 ## 旋钮导航 + 返回键
 
@@ -141,13 +161,16 @@ SCL → GPIO10
 各外设的引脚定义都在自己模块的 `.c` 文件顶部宏里，改对应宏即可，不需要改其他文件：
 
 ```c
-/* 屏幕 display/display.c */
+/* 屏幕 + 触摸 display/display.c + hardware/touch.c */
 #define PIN_SCLK   GPIO_NUM_18
 #define PIN_MOSI   GPIO_NUM_23
+#define PIN_MISO   GPIO_NUM_11   /* 触摸 T_DO */
 #define PIN_CS     GPIO_NUM_5
 #define PIN_DC     GPIO_NUM_17
 #define PIN_RST    GPIO_NUM_16
 #define PIN_BL     GPIO_NUM_4
+#define TOUCH_PIN_CS   GPIO_NUM_9
+#define TOUCH_PIN_IRQ  GPIO_NUM_15
 
 /* 旋钮 + 返回键 hardware/knob.c */
 #define KNOB_GPIO_A    GPIO_NUM_25

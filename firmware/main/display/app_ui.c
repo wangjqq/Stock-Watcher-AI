@@ -78,7 +78,7 @@ void app_ui_draw_system(int view, int cursor, uint8_t brightness, bool auto_brig
 
         display_draw_text(4, STATUS_BAR_HEIGHT + 4, "SYSTEM", 8, COL_TITLE);
 
-        static const char *const labels[SYS_ITEM_COUNT] = { "Brightness", "Refresh", "Status" };
+        static const char *const labels[SYS_ITEM_COUNT] = { "Brightness", "Refresh", "Status", "TouchCal" };
         const int row_top = STATUS_BAR_HEIGHT + 12;
         const int row_h = 20;
         for (int i = 0; i < SYS_ITEM_COUNT; i++) {
@@ -134,5 +134,23 @@ void app_ui_draw_system(int view, int cursor, uint8_t brightness, bool auto_brig
         y += 16;
         display_draw_text(8, y, "OK/BACK: back", 8, COL_DIM);
         return;
+    }
+}
+
+/* 触摸标定页：stage 1=等左上角 2=等右下角 0=完成 */
+void app_ui_draw_touch_cal(int stage)
+{
+    clear_canvas();
+    display_draw_text(4, STATUS_BAR_HEIGHT + 4, "Touch Cal", 8, COL_TITLE);
+
+    if (stage == 1) {
+        display_draw_text(8, STATUS_BAR_HEIGHT + 40, "Tap top-left", 8, COL_FG);
+        display_draw_text(8, STATUS_BAR_HEIGHT + 56, "corner", 8, COL_DIM);
+    } else if (stage == 2) {
+        display_draw_text(8, STATUS_BAR_HEIGHT + 40, "Tap bottom-right", 8, COL_FG);
+        display_draw_text(8, STATUS_BAR_HEIGHT + 56, "corner", 8, COL_DIM);
+    } else {
+        display_draw_text(8, STATUS_BAR_HEIGHT + 40, "Calibrated", 8, COL_OK);
+        display_draw_text(8, STATUS_BAR_HEIGHT + 56, "OK/BACK: back", 8, COL_DIM);
     }
 }

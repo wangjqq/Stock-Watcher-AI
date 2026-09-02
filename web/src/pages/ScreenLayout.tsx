@@ -247,7 +247,7 @@ export default function ScreenLayout() {
           </div>
         </div>
 
-        {/* 可配置画布 128x144 */}
+        {/* 可配置画布 240x304 */}
         <div
           ref={canvasRef}
           style={{

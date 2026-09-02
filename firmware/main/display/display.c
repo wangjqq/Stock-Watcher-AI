@@ -13,16 +13,19 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-static const char *TAG = "st7735";
+static const char *TAG = "ili9341";
 
 /* ------------------------------------------------------------------
- * ST7735 1.8" 128x160 8pin 模块接线（按实际接线改这里）
+ * ILI9341 2.4" 240x320 模块接线（按实际接线改这里）
  *
- *  8pin 引脚:  VCC  GND  CS   RESET  DC   SDI(MOSI)  SCK  LED
- *  建议接线:   3V3  GND  GPIO CS  GPIO RST  GPIO DC   GPIO MOSI GPIO SCK  GPIO 背光
+ *  模块引脚:  VCC GND CS  RESET DC/RS SDI(MOSI) SCK LED SDO(MISO)
+ *             T_CLK T_CS T_DIN T_DO T_IRQ
+ *  T_CLK / T_DIN 与 SCK / SDI 共用同一 SPI 总线（连到同一个 GPIO），
+ *  触摸屏 T_DO 接 MISO（LCD 的 SDO 可不接，写屏无需读回）。
  * ------------------------------------------------------------------ */
 #define PIN_SCLK   GPIO_NUM_18
 #define PIN_MOSI   GPIO_NUM_23
+#define PIN_MISO   GPIO_NUM_11   /* 触摸屏 T_DO（触摸 SPI 读回，见 touch.c） */
 #define PIN_CS     GPIO_NUM_5
 #define PIN_DC     GPIO_NUM_17   /* A0 / 数据命令选择 */
 #define PIN_RST    GPIO_NUM_16
@@ -31,10 +34,16 @@ static const char *TAG = "st7735";
 #define SPI_HOST_ID  SPI2_HOST
 #define SPI_FREQ_HZ  (26 * 1000 * 1000)
 
+/* 整屏刷新的 SPI 传输分块大小（DMA 单次传输上限内）；fb 在 PSRAM 时
+ * 需先拷到内部 RAM 的 DMA 缓冲再发出。 */
+#define FB_CHUNK     2048
+
 #define RGB565(r, g, b) ((((uint16_t)(r) & 0xF8) << 8) | (((uint16_t)(g) & 0xFC) << 3) | ((uint16_t)(b) >> 3))
 
 static spi_device_handle_t s_spi;
-static uint16_t s_fb[DISPLAY_WIDTH * DISPLAY_HEIGHT]; /* 帧缓冲（40KB），整屏绘制后一次性刷出 */
+static uint16_t *s_fb = NULL; /* 帧缓冲（240x320 = 150KB）：PSRAM 分配，不足时退回内部 RAM */
+static bool      s_fb_psram = false;
+static uint8_t   s_dma_buf[FB_CHUNK] __attribute__((aligned(4))); /* SPI DMA 用内部 RAM 缓冲 */
 
 /* ---------------- SPI 底层 ---------------- */
 
@@ -92,49 +101,46 @@ static void lcd_reset(void)
     vTaskDelay(pdMS_TO_TICKS(120));
 }
 
-/* ST7735 初始化（128x160 常用序列）。若颜色/方向不对，参考下方注释微调 */
-static void st7735_init(void)
+/* ILI9341 初始化（240x320 常用序列）。若颜色/方向不对，参考下方注释微调 */
+static void ili9341_init(void)
 {
     spi_send_cmd(0x01);                        /* SWRESET */
-    vTaskDelay(pdMS_TO_TICKS(150));
+    vTaskDelay(pdMS_TO_TICKS(120));
 
     spi_send_cmd(0x11);                        /* SLPOUT */
-    vTaskDelay(pdMS_TO_TICKS(150));
+    vTaskDelay(pdMS_TO_TICKS(120));
 
-    static const uint8_t d1[] = { 0x01, 0x2C, 0x2D };
-    write_cmd_data(0xB1, d1, 3);               /* FRMCTR1 */
-    write_cmd_data(0xB2, d1, 3);               /* FRMCTR2 */
-    static const uint8_t d2[] = { 0x01, 0x2C, 0x2D, 0x01, 0x2C, 0x2D };
-    write_cmd_data(0xB3, d2, 6);               /* FRMCTR3 */
-    static const uint8_t d3[] = { 0x07 };
-    write_cmd_data(0xB4, d3, 1);               /* INVCTR */
-    static const uint8_t d4[] = { 0xA2, 0x02, 0x84 };
-    write_cmd_data(0xC0, d4, 3);               /* PWCTR1 */
-    static const uint8_t d5[] = { 0xC5 };
-    write_cmd_data(0xC1, d5, 1);               /* PWCTR2 */
-    static const uint8_t d6[] = { 0x0A, 0x00 };
-    write_cmd_data(0xC2, d6, 2);               /* PWCTR3 */
-    static const uint8_t d7[] = { 0x8A, 0x2A };
-    write_cmd_data(0xC3, d7, 2);               /* PWCTR4 */
-    static const uint8_t d8[] = { 0x8A, 0xEE };
-    write_cmd_data(0xC4, d8, 2);               /* PWCTR5 */
-    static const uint8_t d9[] = { 0x0E };
-    write_cmd_data(0xC5, d9, 1);               /* VMCTR1 */
-    static const uint8_t d10[] = { 0x00 };
-    write_cmd_data(0x36, d10, 1);              /* MADCTL 竖屏 128x160 */
-    static const uint8_t d11[] = { 0x05 };
-    write_cmd_data(0x3A, d11, 1);              /* COLMOD 16bit */
+    static const uint8_t d1[] = { 0x23 };
+    write_cmd_data(0xC0, d1, 1);               /* PWCTRL1 */
+    static const uint8_t d2[] = { 0x10 };
+    write_cmd_data(0xC1, d2, 1);               /* PWCTRL2 */
+    static const uint8_t d3[] = { 0x3E, 0x28 };
+    write_cmd_data(0xC5, d3, 2);               /* VMCTRL1 */
+    static const uint8_t d4[] = { 0x86 };
+    write_cmd_data(0xC7, d4, 1);               /* VMCTRL2 */
+    static const uint8_t d5[] = { 0x48 };      /* MADCTL 竖屏 240x320 */
+    write_cmd_data(0x36, d5, 1);
+    static const uint8_t d6[] = { 0x55 };      /* COLMOD 16bit/像素 */
+    write_cmd_data(0x3A, d6, 1);
+    static const uint8_t d7[] = { 0x00, 0x1B };
+    write_cmd_data(0xB1, d7, 2);               /* FRMCTR1 */
+    static const uint8_t d8[] = { 0x00, 0x12, 0x07 };
+    write_cmd_data(0xB6, d8, 3);               /* DFUNCTR */
+    static const uint8_t d9[] = { 0x0F, 0x31, 0x2B, 0x0C, 0x0E, 0x08, 0x4E, 0xF1,
+                                  0x37, 0x07, 0x10, 0x03, 0x0E, 0x09, 0x00 };
+    write_cmd_data(0xE0, d9, 15);              /* GMCTRP1 正极性 Gamma */
+    static const uint8_t d10[] = { 0x00, 0x0E, 0x14, 0x03, 0x11, 0x07, 0x31, 0xC1,
+                                   0x48, 0x08, 0x0F, 0x0C, 0x31, 0x36, 0x0F };
+    write_cmd_data(0xE1, d10, 15);             /* GMCTRN1 负极性 Gamma */
 
-    spi_send_cmd(0x20);                        /* INVOFF */
-    spi_send_cmd(0x13);                        /* NORON */
-    vTaskDelay(pdMS_TO_TICKS(10));
+    spi_send_cmd(0x20);                        /* INVOFF（画面反色则改 0x21 INVON） */
     spi_send_cmd(0x29);                        /* DISPON */
     vTaskDelay(pdMS_TO_TICKS(100));
 
     /* 不同批次面板颜色/方向可能不同，可尝试：
      * - 颜色偏红蓝：MADCTL 加 0x08（BGR）
      * - 画面反色：INVOFF(0x20) 改 INVON(0x21)
-     * - 方向不对：MADCTL 改 0xC0 / 0xA0 / 0x60 等 */
+     * - 方向不对：MADCTL 改 0xC8 / 0x88 / 0x08 / 0x28 等 */
 }
 
 /* ---------------- 背光（LEDC PWM，亮度 0-100） ---------------- */
@@ -194,13 +200,28 @@ esp_err_t display_init(uint8_t brightness)
     gpio_config(&io);
     backlight_init(brightness); /* 背光走 LEDC PWM */
 
+    /* 帧缓冲：优先 PSRAM（150KB），PSRAM 不可用时退回内部 RAM */
+    s_fb = heap_caps_malloc(DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t),
+                            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    s_fb_psram = (s_fb != NULL);
+    if (!s_fb) {
+        ESP_LOGW(TAG, "no psram fb, fallback to internal RAM");
+        s_fb = heap_caps_malloc(DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t),
+                                MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+    }
+    if (!s_fb) {
+        ESP_LOGE(TAG, "no memory for framebuffer");
+        return ESP_ERR_NO_MEM;
+    }
+
+    /* LCD 与触摸屏共用一条 SPI 总线：MISO 接触摸屏 T_DO */
     spi_bus_config_t bus = {
         .mosi_io_num = PIN_MOSI,
-        .miso_io_num = -1,       /* 8pin 模块无 MISO */
+        .miso_io_num = PIN_MISO,
         .sclk_io_num = PIN_SCLK,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
-        .max_transfer_sz = DISPLAY_WIDTH * 2,
+        .max_transfer_sz = FB_CHUNK,
     };
     esp_err_t err = spi_bus_initialize(SPI_HOST_ID, &bus, SPI_DMA_CH_AUTO);
     if (err != ESP_OK) {
@@ -221,12 +242,19 @@ esp_err_t display_init(uint8_t brightness)
     }
 
     lcd_reset();
-    st7735_init();
+    ili9341_init();
     display_clear(0x000000);
     display_update();
-    ESP_LOGI(TAG, "st7735 ready %dx%d, canvas=%dx%d, status bar=%dpx",
-             DISPLAY_WIDTH, DISPLAY_HEIGHT, CANVAS_WIDTH, CANVAS_HEIGHT, STATUS_BAR_HEIGHT);
+    ESP_LOGI(TAG, "ili9341 ready %dx%d, canvas=%dx%d, status bar=%dpx, fb=%s",
+             DISPLAY_WIDTH, DISPLAY_HEIGHT, CANVAS_WIDTH, CANVAS_HEIGHT, STATUS_BAR_HEIGHT,
+             s_fb_psram ? "psram" : "internal-ram");
     return ESP_OK;
+}
+
+/* 在共享 SPI 总线上注册触摸屏设备（供 touch.c 使用） */
+esp_err_t display_spi_add_device(const spi_device_interface_config_t *dev, spi_device_handle_t *out)
+{
+    return spi_bus_add_device(SPI_HOST_ID, dev, out);
 }
 
 /* ---------------- 帧缓冲绘制 ---------------- */
@@ -493,7 +521,7 @@ void display_draw_status_bar(const char *time_str, int rssi_dbm, int battery_pct
 
     /* 右侧：信号（4 格） */
     int bars = rssi_bars(rssi_dbm);
-    int sx = 94;   /* 信号图标左缘 */
+    int sx = DISPLAY_WIDTH - 37; /* 信号图标左缘 */
     int bot = 4 + 8;
     for (int i = 0; i < 4; i++) {
         int h = 2 + i * 2; /* 2,4,6,8 */
@@ -502,7 +530,8 @@ void display_draw_status_bar(const char *time_str, int rssi_dbm, int battery_pct
     }
 
     /* 右侧：电池（外框 + 填充 + 正极帽） */
-    int bx = 112, by = 4, bw = 14, bh = 8;
+    int bw = 14, bh = 8, by = 4;
+    int bx = DISPLAY_WIDTH - 2 - bw - 2; /* 靠右边缘，预留 2px 正极帽 + 2px 边距 */
     fb_fill_rect(bx, by, bw, bh, RGB565(0x66, 0x66, 0x66));                        /* 外框 */
     fb_fill_rect(bx + 1, by + 1, bw - 2, bh - 2, RGB565(0x00, 0x00, 0x00));        /* 内底 */
     int fill = (bw - 4) * battery_pct / 100;
@@ -530,14 +559,16 @@ void display_update(void)
 
     gpio_set_level(PIN_DC, 1);
     const uint8_t *p = (const uint8_t *)s_fb;
-    size_t total = sizeof(s_fb);
+    size_t total = DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t);
     size_t off = 0;
-    const size_t CHUNK = 2048; /* ESP32 SPI DMA 单次传输上限内分块，保持 CS 拉低 */
     while (off < total) {
-        size_t n = (total - off > CHUNK) ? CHUNK : (total - off);
+        size_t n = (total - off > FB_CHUNK) ? FB_CHUNK : (total - off);
+        /* fb 在 PSRAM 时 SPI DMA 无法直接读，先拷到内部 RAM 缓冲再发出；
+         * fb 在内部 RAM 时同样走该缓冲，逻辑统一。 */
+        memcpy(s_dma_buf, p + off, n);
         spi_transaction_t t = { 0 };
         t.length = n * 8;
-        t.tx_buffer = p + off;
+        t.tx_buffer = s_dma_buf;
         if (off + n < total) {
             t.flags |= SPI_TRANS_CS_KEEP_ACTIVE;
         }

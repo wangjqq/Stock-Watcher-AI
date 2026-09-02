@@ -34,6 +34,7 @@ idf_component_register(
         "hardware/selftest.c"
         "hardware/battery.c"
         "hardware/light_sensor.c"
+        "hardware/touch.c"
         "${WEB_ASSETS_C}"
     INCLUDE_DIRS
         "."

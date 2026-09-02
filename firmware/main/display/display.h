@@ -3,24 +3,29 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
+#include "driver/spi_master.h"
 
 /* ------------------------------------------------------------------
  * 屏幕与画布参数（与前端 web/src/constants.ts 保持一致）
  *
- *  屏幕 128x160 (ST7735, 1.8")，顶部 16px 为状态栏，
- *  状态栏以下 128x144 为可配置显示区域（canvas）。
+ *  屏幕 240x320 (ILI9341, 2.4")，顶部 16px 为状态栏，
+ *  状态栏以下 240x304 为可配置显示区域（canvas）。
  * ------------------------------------------------------------------ */
-#define DISPLAY_WIDTH       128
-#define DISPLAY_HEIGHT      160
+#define DISPLAY_WIDTH       240
+#define DISPLAY_HEIGHT      320
 #define STATUS_BAR_HEIGHT   16
-#define CANVAS_WIDTH        128
-#define CANVAS_HEIGHT       (DISPLAY_HEIGHT - STATUS_BAR_HEIGHT)  /* 144 */
+#define CANVAS_WIDTH        240
+#define CANVAS_HEIGHT       (DISPLAY_HEIGHT - STATUS_BAR_HEIGHT)  /* 304 */
 
 /* 初始化屏幕，brightness 为初始背光亮度 0-100 */
 esp_err_t display_init(uint8_t brightness);
 
 /* 运行期调整背光亮度 0-100（LEDC PWM） */
 void display_set_brightness(uint8_t pct);
+
+/* 在 LCD 所在的共享 SPI 总线上注册另一个设备（触摸屏 XPT2046 用）。
+ * 需在 display_init() 之后调用；返回 spi_bus_add_device 的结果。 */
+esp_err_t display_spi_add_device(const spi_device_interface_config_t *dev, spi_device_handle_t *out);
 
 void display_clear(uint32_t color); /* RGB888 */
 void display_fill_rect(int x, int y, int w, int h, uint32_t color);

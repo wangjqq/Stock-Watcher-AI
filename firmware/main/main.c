@@ -23,6 +23,7 @@
 #include "light_sensor.h"
 #include "selftest.h"
 #include "status_bar.h"
+#include "touch.h"
 #include "version.h"
 #include "wifi_manager.h"
 
@@ -54,6 +55,7 @@ static uint32_t    s_cursor = 0;     /* 应用列表光标：0..s_menu_count-1�
 static uint32_t    s_menu_count = 1; /* = 用户应用数 + 1（含「系统」） */
 static int         s_sys = SYS_VIEW_MENU;   /* 系统应用内部视图 */
 static uint32_t    s_sys_cursor = 0;        /* 系统菜单光标 0..SYS_ITEM_COUNT-1 */
+static uint32_t    s_cal_done_ms = 0;       /* 触摸标定完成后的提示截止时间 */
 static uint8_t     s_brightness = 80;       /* 当前亮度（会话值，主循环回写 NVS） */
 static bool        s_brightness_dirty = false;
 static bool        s_auto_brightness = false;      /* 光敏自动亮度开关（从 cfg 同步） */
@@ -261,8 +263,12 @@ static void on_system_input(knob_event_t ev)
                 s_sys = SYS_VIEW_BRIGHT;
             } else if (s_sys_cursor == 1) {
                 s_manual_refresh = true; /* 主循环立即重新拉取全部接口 */
-            } else {
+            } else if (s_sys_cursor == 2) {
                 s_sys = SYS_VIEW_STATUS;
+            } else {
+                s_sys = SYS_VIEW_CAL; /* 触摸标定 */
+                s_cal_done_ms = 0;
+                touch_cal_begin();
             }
             key_feedback();
             break;
@@ -310,6 +316,18 @@ static void on_system_input(knob_event_t ev)
         }
         break;
 
+    case SYS_VIEW_CAL:
+        switch (ev) {
+        case KNOB_EV_OK:
+        case KNOB_EV_BACK:
+            s_sys = SYS_VIEW_MENU;
+            key_feedback();
+            break;
+        default:
+            break;
+        }
+        break;
+
     default:
         break;
     }
@@ -329,6 +347,85 @@ static void on_input(knob_event_t ev)
     case UI_APP:    on_app_input(ev);    break;
     case UI_SYSTEM: on_system_input(ev); break;
     default:                            break;
+    }
+}
+
+/* 判断屏幕像素 y 是否落在 [row_top, row_top+count*row_h) 内的某一行，返回行号或 -1 */
+static int row_hit(int y, int row_top, int row_h, int count)
+{
+    if (y < row_top) {
+        return -1;
+    }
+    int idx = (y - row_top) / row_h;
+    return (idx >= 0 && idx < count) ? idx : -1;
+}
+
+/* 触摸 tap 事件：按当前界面状态点选。
+ * 菜单/系统菜单按行命中打开；应用内点按切换下一个应用。 */
+static void on_touch_tap(int x, int y)
+{
+    (void)x;
+
+    /* 任何触摸都视为活动：重置休眠计时；休眠中被唤醒 */
+    s_last_activity_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    if (s_screen_asleep) {
+        wake_screen();
+    }
+
+    /* 标定页内触摸由主循环按原始坐标处理，这里忽略 tap */
+    if (s_ui == UI_SYSTEM && s_sys == SYS_VIEW_CAL) {
+        return;
+    }
+
+    if (s_ui == UI_MENU) {
+        int idx = row_hit(y, STATUS_BAR_HEIGHT + 14, 16, (int)s_menu_count);
+        if (idx < 0) {
+            return;
+        }
+        s_cursor = (uint32_t)idx;
+        if (idx == (int)s_menu_count - 1) { /* 末尾为系统应用 */
+            s_ui = UI_SYSTEM;
+            s_sys = SYS_VIEW_MENU;
+            s_sys_cursor = 0;
+        } else {
+            s_current_app = (uint32_t)idx;
+            s_ui = UI_APP;
+        }
+        key_feedback();
+        return;
+    }
+
+    if (s_ui == UI_APP) {
+        /* 应用内点按任意位置 → 切换下一个用户应用 */
+        s_current_app = (s_current_app + 1) % s_app_count;
+        key_feedback();
+        return;
+    }
+
+    if (s_ui == UI_SYSTEM) {
+        if (s_sys == SYS_VIEW_MENU) {
+            int idx = row_hit(y, STATUS_BAR_HEIGHT + 12, 20, SYS_ITEM_COUNT);
+            if (idx < 0) {
+                return;
+            }
+            s_sys_cursor = (uint32_t)idx;
+            if (idx == 0) {
+                s_sys = SYS_VIEW_BRIGHT;
+            } else if (idx == 1) {
+                s_manual_refresh = true;
+            } else if (idx == 2) {
+                s_sys = SYS_VIEW_STATUS;
+            } else {
+                s_sys = SYS_VIEW_CAL;
+                s_cal_done_ms = 0;
+                touch_cal_begin();
+            }
+            key_feedback();
+        } else {
+            /* 亮度/状态/标定页点按 = 返回菜单（同 OK/BACK） */
+            s_sys = SYS_VIEW_MENU;
+            key_feedback();
+        }
     }
 }
 
@@ -365,6 +462,10 @@ static void render_canvas(const app_config_t *cfg)
     }
 
     if (s_ui == UI_SYSTEM) {
+        if (s_sys == SYS_VIEW_CAL) {
+            app_ui_draw_touch_cal(touch_cal_state());
+            return;
+        }
         char ip[32];
         wifi_manager_ip_str(ip, sizeof(ip));
         bool refreshing = (uint32_t)(esp_timer_get_time() / 1000) < s_refresh_feedback_ms;
@@ -401,6 +502,7 @@ void app_main(void)
     indicator_init();
     battery_init();      /* ADC 电池电量（状态栏显示） */
     light_sensor_init(); /* BH1750 光敏（自动亮度） */
+    touch_init();        /* XPT2046 触摸（共享 SPI 总线，须在 display_init 之后） */
     font_zh_init();      /* GB2312 一级汉字字库（mmap fonts 分区，缺失时中文退化为方块） */
     wifi_manager_init(&cfg);
     wifi_manager_start_mdns("stockwatcher");
@@ -412,6 +514,7 @@ void app_main(void)
 
     /* 输入统一走这里：按当前界面状态（菜单 / 应用 / 系统）分发 */
     knob_set_handler(on_input);
+    touch_set_handler(on_touch_tap);
 
     uint32_t last_status_ms = 0;
 
@@ -470,6 +573,25 @@ void app_main(void)
             s_last_rotate_ms = now_ms;
             s_current_app = (s_current_app + 1) % s_app_count;
             s_force_redraw = true;
+        }
+
+        /* 触摸标定：标定页内轮询原始点；完成后短暂提示再回菜单 */
+        if (s_ui == UI_SYSTEM && s_sys == SYS_VIEW_CAL) {
+            if (s_cal_done_ms != 0 && now_ms >= s_cal_done_ms) {
+                s_cal_done_ms = 0;
+                s_sys = SYS_VIEW_MENU;
+                s_force_redraw = true;
+            } else {
+                int rx, ry;
+                if (touch_read_raw(&rx, &ry)) {
+                    if (touch_cal_feed(rx, ry, true)) {
+                        s_cal_done_ms = now_ms + 1000;
+                        key_feedback(); /* 蜂鸣 + 重绘，显示 Calibrated 提示 */
+                    } else {
+                        s_force_redraw = true; /* 标定阶段变化，刷新提示文字 */
+                    }
+                }
+            }
         }
 
         /* 光敏自动亮度：每秒采样一次，按光照度映射亮度；传感器未接则跳过 */
