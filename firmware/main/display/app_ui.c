@@ -79,7 +79,7 @@ void app_ui_draw_system(int view, int cursor, uint8_t brightness, bool auto_brig
 
         display_draw_text(4, STATUS_BAR_HEIGHT + 4, "SYSTEM", 8, COL_TITLE);
 
-        static const char *const labels[SYS_ITEM_COUNT] = { "Brightness", "Refresh", "Status", "WiFi", "QR", "TouchCal" };
+        static const char *const labels[SYS_ITEM_COUNT] = { "Brightness", "Refresh", "Status", "WiFi", "QR", "TouchCal", "Manual" };
         const int row_top = STATUS_BAR_HEIGHT + 12;
         const int row_h = 20;
         for (int i = 0; i < SYS_ITEM_COUNT; i++) {
@@ -189,4 +189,94 @@ void app_ui_draw_qr(void)
     int lw = (int)strlen(QR_CONTENT) * 8;
     display_draw_text((CANVAS_WIDTH - lw) / 2, y0 + px + 10, QR_CONTENT, 8, COL_FG);
     display_draw_text(4, y0 + px + 26, "OK/BACK: back", 8, COL_DIM);
+}
+
+/* ---------------- 用户手册（分页） ----------------
+ * 内容与网页「用户手册」一致的精简版。每行不超过 28 字符（240 宽 / 8px）。
+ * 新增 / 修改 / 删除功能时，请同步更新这里与 web/src/pages/UserManual.tsx。 */
+
+#define MANUAL_LINES 12 /* 每页最大行数 */
+
+static const char *const s_manual_pages[MANUAL_PAGES][MANUAL_LINES] = {
+    {
+        "== QUICK START ==",
+        "App: your stock layout",
+        "Knob: rotate / click",
+        "Touch: tap / swipe",
+        "Swipe L/R: switch app",
+        "Edge-swipe: go back",
+        "Status-bar <: back",
+        "",
+        "Swipe or rotate knob",
+        "to browse pages.",
+        "OK/BACK: exit manual",
+    },
+    {
+        "== CONFIG ==",
+        "1 Open web page:",
+        "   http://stockwatcher.",
+        "   local (same WiFi)",
+        "2 Add API url in web:",
+        "   Interface config",
+        "3 Test, pick fields,",
+        "   drag layout, save",
+        "4 Device fetches data",
+        "   per refresh interval",
+        "Multi-stock supported",
+    },
+    {
+        "== SYSTEM MENU ==",
+        "Brightness: knob set",
+        "Refresh: fetch now",
+        "Status: IP / RSSI / Ver",
+        "WiFi: join network",
+        "QR: scan -> web page",
+        "TouchCal: calibrate if",
+        "   touch is off-center",
+        "Manual: this page",
+    },
+    {
+        "== POWER & ALERTS ==",
+        "Screen sleep: auto dim,",
+        "   any key wakes it",
+        "Auto rotate: cycles",
+        "   through apps",
+        "Alerts: field > / <",
+        "   threshold -> beep",
+        "   + LED + red banner",
+        "Data keeps running",
+        "   while screen sleeps",
+    },
+};
+
+void app_ui_draw_manual(int page)
+{
+    if (page < 0) {
+        page = 0;
+    }
+    if (page >= MANUAL_PAGES) {
+        page = MANUAL_PAGES - 1;
+    }
+
+    clear_canvas();
+
+    /* 标题 + 页码 */
+    display_draw_text(4, STATUS_BAR_HEIGHT + 4, "MANUAL", 8, COL_TITLE);
+    char hdr[16];
+    snprintf(hdr, sizeof(hdr), "%d/%d", page + 1, MANUAL_PAGES);
+    int hw = (int)strlen(hdr) * 8;
+    display_draw_text(CANVAS_WIDTH - 4 - hw, STATUS_BAR_HEIGHT + 4, hdr, 8, COL_DIM);
+
+    /* 正文（8px 等宽，行距 10px） */
+    const int y0 = STATUS_BAR_HEIGHT + 16;
+    for (int i = 0; i < MANUAL_LINES; i++) {
+        const char *line = s_manual_pages[page][i];
+        if (line[0] == '\0') {
+            continue;
+        }
+        display_draw_text(8, y0 + i * 10, line, 8, COL_FG);
+    }
+
+    /* 底部返回提示 */
+    display_draw_text(4, STATUS_BAR_HEIGHT + CANVAS_HEIGHT - 12, "OK/BACK: back", 8, COL_DIM);
 }

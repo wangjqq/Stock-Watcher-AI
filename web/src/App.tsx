@@ -4,6 +4,7 @@ import {
   AlertOutlined,
   ApiOutlined,
   AppstoreOutlined,
+  BookOutlined,
   CloudUploadOutlined,
   DashboardOutlined,
   LayoutOutlined,
@@ -20,6 +21,7 @@ const ScreenLayout = lazy(() => import('./pages/ScreenLayout'))
 const AlertConfig = lazy(() => import('./pages/AlertConfig'))
 const SystemStatus = lazy(() => import('./pages/SystemStatus'))
 const OtaUpgrade = lazy(() => import('./pages/OtaUpgrade'))
+const UserManual = lazy(() => import('./pages/UserManual'))
 
 const { Sider, Header, Content } = Layout
 
@@ -35,6 +37,7 @@ export default function App() {
     alerts: <AlertConfig />,
     status: <SystemStatus />,
     ota: <OtaUpgrade />,
+    manual: <UserManual />,
   }
 
   return (
@@ -57,6 +60,7 @@ export default function App() {
             { key: 'alerts', icon: <AlertOutlined />, label: '提醒设置' },
             { key: 'status', icon: <DashboardOutlined />, label: '系统状态' },
             { key: 'ota', icon: <CloudUploadOutlined />, label: '固件升级' },
+            { key: 'manual', icon: <BookOutlined />, label: '用户手册' },
           ]}
         />
       </Sider>

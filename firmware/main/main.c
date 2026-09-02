@@ -57,6 +57,7 @@ static uint32_t    s_menu_count = 1; /* = 用户应用数 + 1（含「系统」�
 static int         s_sys = SYS_VIEW_MENU;   /* 系统应用内部视图 */
 static uint32_t    s_sys_cursor = 0;        /* 系统菜单光标 0..SYS_ITEM_COUNT-1 */
 static uint32_t    s_cal_done_ms = 0;       /* 触摸标定完成后的提示截止时间 */
+static uint32_t    s_manual_page = 0;       /* 用户手册当前页 0..MANUAL_PAGES-1 */
 static uint8_t     s_brightness = 80;       /* 当前亮度（会话值，主循环回写 NVS） */
 static bool        s_brightness_dirty = false;
 static bool        s_auto_brightness = false;      /* 光敏自动亮度开关（从 cfg 同步） */
@@ -271,10 +272,13 @@ static void on_system_input(knob_event_t ev)
                 wifi_ui_enter();
             } else if (s_sys_cursor == 4) {
                 s_sys = SYS_VIEW_QR; /* 管理页面二维码 */
-            } else {
+            } else if (s_sys_cursor == 5) {
                 s_sys = SYS_VIEW_CAL; /* 触摸标定 */
                 s_cal_done_ms = 0;
                 touch_cal_begin();
+            } else {
+                s_sys = SYS_VIEW_MANUAL; /* 用户手册 */
+                s_manual_page = 0;
             }
             key_feedback();
             break;
@@ -342,6 +346,27 @@ static void on_system_input(knob_event_t ev)
 
     case SYS_VIEW_CAL:
         switch (ev) {
+        case KNOB_EV_OK:
+        case KNOB_EV_BACK:
+            s_sys = SYS_VIEW_MENU;
+            key_feedback();
+            break;
+        default:
+            break;
+        }
+        break;
+
+    case SYS_VIEW_MANUAL:
+        /* 用户手册：旋转翻页，OK / BACK 返回系统菜单 */
+        switch (ev) {
+        case KNOB_EV_LEFT:
+            s_manual_page = (s_manual_page + MANUAL_PAGES - 1) % MANUAL_PAGES;
+            key_feedback();
+            break;
+        case KNOB_EV_RIGHT:
+            s_manual_page = (s_manual_page + 1) % MANUAL_PAGES;
+            key_feedback();
+            break;
         case KNOB_EV_OK:
         case KNOB_EV_BACK:
             s_sys = SYS_VIEW_MENU;
@@ -429,7 +454,7 @@ static void on_touch_ev(const touch_event_t *ev)
         return;
     }
 
-    /* ---- 左右滑动：移动光标 / 切换应用 ---- */
+    /* ---- 左右滑动：移动光标 / 切换应用 / 手册翻页 ---- */
     if (ev->ev == TOUCH_SWIPE_LEFT || ev->ev == TOUCH_SWIPE_RIGHT) {
         int dir = (ev->ev == TOUCH_SWIPE_RIGHT) ? 1 : -1;
         if (s_ui == UI_MENU) {
@@ -438,6 +463,8 @@ static void on_touch_ev(const touch_event_t *ev)
             s_current_app = (uint32_t)((s_current_app + s_app_count + dir) % s_app_count);
         } else if (s_ui == UI_SYSTEM && s_sys == SYS_VIEW_MENU) {
             s_sys_cursor = (uint32_t)((s_sys_cursor + SYS_ITEM_COUNT + dir) % SYS_ITEM_COUNT);
+        } else if (s_ui == UI_SYSTEM && s_sys == SYS_VIEW_MANUAL) {
+            s_manual_page = (uint32_t)((s_manual_page + MANUAL_PAGES + dir) % MANUAL_PAGES);
         } else {
             return; /* 系统子页滑动不处理 */
         }
@@ -501,10 +528,13 @@ static void on_touch_ev(const touch_event_t *ev)
                 wifi_ui_enter();
             } else if (idx == 4) {
                 s_sys = SYS_VIEW_QR;
-            } else {
+            } else if (idx == 5) {
                 s_sys = SYS_VIEW_CAL;
                 s_cal_done_ms = 0;
                 touch_cal_begin();
+            } else {
+                s_sys = SYS_VIEW_MANUAL;
+                s_manual_page = 0;
             }
             key_feedback();
         } else {
@@ -558,6 +588,10 @@ static void render_canvas(const app_config_t *cfg)
         }
         if (s_sys == SYS_VIEW_QR) {
             app_ui_draw_qr();
+            return;
+        }
+        if (s_sys == SYS_VIEW_MANUAL) {
+            app_ui_draw_manual((int)s_manual_page);
             return;
         }
         char ip[32];
