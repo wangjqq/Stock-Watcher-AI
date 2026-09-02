@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "display.h"
+#include "qr_admin.h"
 
 /* 配色 */
 #define COL_TITLE  0xFFD700 /* 金色标题 */
@@ -78,7 +79,7 @@ void app_ui_draw_system(int view, int cursor, uint8_t brightness, bool auto_brig
 
         display_draw_text(4, STATUS_BAR_HEIGHT + 4, "SYSTEM", 8, COL_TITLE);
 
-        static const char *const labels[SYS_ITEM_COUNT] = { "Brightness", "Refresh", "Status", "WiFi", "TouchCal" };
+        static const char *const labels[SYS_ITEM_COUNT] = { "Brightness", "Refresh", "Status", "WiFi", "QR", "TouchCal" };
         const int row_top = STATUS_BAR_HEIGHT + 12;
         const int row_h = 20;
         for (int i = 0; i < SYS_ITEM_COUNT; i++) {
@@ -153,4 +154,39 @@ void app_ui_draw_touch_cal(int stage)
         display_draw_text(8, STATUS_BAR_HEIGHT + 40, "Calibrated", 8, COL_OK);
         display_draw_text(8, STATUS_BAR_HEIGHT + 56, "OK/BACK: back", 8, COL_DIM);
     }
+}
+
+/* ---------------- 管理页面二维码 ---------------- */
+
+#define QR_CONTENT "http://stockwatcher.local" /* mDNS 域名，固定不变 */
+#define QR_SCALE   6                           /* 每模块像素：(29+8)*6=222px，适配 240 宽画布 */
+
+void app_ui_draw_qr(void)
+{
+    clear_canvas();
+
+    int total = QR_ADMIN_SIZE + 2 * QR_ADMIN_QUIET;
+    int px = total * QR_SCALE;
+    int x0 = (CANVAS_WIDTH - px) / 2;
+    int y0 = STATUS_BAR_HEIGHT + 18;
+
+    /* 白底（含静区），保证二维码可被扫码识别 */
+    display_fill_rect(x0, y0, px, px, 0xFFFFFF);
+
+    /* 黑色模块：位图来自构建期预生成的 qr_admin.h，按位读取（1=黑） */
+    for (int my = 0; my < QR_ADMIN_SIZE; my++) {
+        for (int mx = 0; mx < QR_ADMIN_SIZE; mx++) {
+            int idx = my * QR_ADMIN_SIZE + mx;
+            if (qr_admin_modules[idx >> 3] & (1 << (7 - (idx & 7)))) {
+                display_fill_rect(x0 + (QR_ADMIN_QUIET + mx) * QR_SCALE,
+                                  y0 + (QR_ADMIN_QUIET + my) * QR_SCALE,
+                                  QR_SCALE, QR_SCALE, 0x000000);
+            }
+        }
+    }
+
+    /* 下方 URL 文字（居中）+ 返回提示 */
+    int lw = (int)strlen(QR_CONTENT) * 8;
+    display_draw_text((CANVAS_WIDTH - lw) / 2, y0 + px + 10, QR_CONTENT, 8, COL_FG);
+    display_draw_text(4, y0 + px + 26, "OK/BACK: back", 8, COL_DIM);
 }

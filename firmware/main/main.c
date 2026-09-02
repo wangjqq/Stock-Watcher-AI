@@ -269,6 +269,8 @@ static void on_system_input(knob_event_t ev)
             } else if (s_sys_cursor == 3) {
                 s_sys = SYS_VIEW_WIFI; /* 设备端 WiFi 连接页 */
                 wifi_ui_enter();
+            } else if (s_sys_cursor == 4) {
+                s_sys = SYS_VIEW_QR; /* 管理页面二维码 */
             } else {
                 s_sys = SYS_VIEW_CAL; /* 触摸标定 */
                 s_cal_done_ms = 0;
@@ -309,6 +311,19 @@ static void on_system_input(knob_event_t ev)
         break;
 
     case SYS_VIEW_STATUS:
+        switch (ev) {
+        case KNOB_EV_OK:
+        case KNOB_EV_BACK:
+            s_sys = SYS_VIEW_MENU;
+            key_feedback();
+            break;
+        default:
+            break;
+        }
+        break;
+
+    case SYS_VIEW_QR:
+        /* 二维码页：OK / BACK 返回系统菜单 */
         switch (ev) {
         case KNOB_EV_OK:
         case KNOB_EV_BACK:
@@ -484,6 +499,8 @@ static void on_touch_ev(const touch_event_t *ev)
             } else if (idx == 3) {
                 s_sys = SYS_VIEW_WIFI;
                 wifi_ui_enter();
+            } else if (idx == 4) {
+                s_sys = SYS_VIEW_QR;
             } else {
                 s_sys = SYS_VIEW_CAL;
                 s_cal_done_ms = 0;
@@ -537,6 +554,10 @@ static void render_canvas(const app_config_t *cfg)
         }
         if (s_sys == SYS_VIEW_CAL) {
             app_ui_draw_touch_cal(touch_cal_state());
+            return;
+        }
+        if (s_sys == SYS_VIEW_QR) {
+            app_ui_draw_qr();
             return;
         }
         char ip[32];
