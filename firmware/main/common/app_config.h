@@ -82,7 +82,7 @@ typedef struct {
 /* 设备全局配置 */
 typedef struct {
     char     device_name[CONFIG_DEVICE_NAME_MAX];
-    char     ssid[CONFIG_SSID_MAX];           /* 为空则进入 AP 配网模式 */
+    char     ssid[CONFIG_SSID_MAX];           /* 为空则 STA 待机，由设备端 WiFi 页配置 */
     char     password[CONFIG_PASS_MAX];
     uint8_t  brightness;                      /* 屏幕亮度 0-100 */
     bool     auto_brightness;                 /* 光敏自动调节屏幕亮度 */

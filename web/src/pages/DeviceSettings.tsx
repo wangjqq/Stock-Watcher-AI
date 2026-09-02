@@ -137,7 +137,7 @@ export default function DeviceSettings() {
         <Form.Item name="device_name" label="设备名称">
           <Input placeholder="StockWatcher" />
         </Form.Item>
-        <Form.Item name="ssid" label="Wi-Fi 名称（留空则进入 AP 配网模式）">
+        <Form.Item name="ssid" label="Wi-Fi 名称（留空表示未配置，可在设备端「系统 → WiFi」页连接）">
           <Input placeholder="请输入 Wi-Fi SSID" />
         </Form.Item>
         <Form.Item name="password" label="Wi-Fi 密码">
@@ -184,7 +184,7 @@ export default function DeviceSettings() {
           </Button>
           <Popconfirm
             title="确定重置所有配置吗？"
-            description="设备将清空配置并重启，回到 AP 配网模式"
+            description="设备将清空配置并重启，需在设备端「系统 → WiFi」页重新连接 Wi-Fi"
             onConfirm={onReset}
           >
             <Button danger>重置配置</Button>

@@ -136,7 +136,7 @@ static esp_err_t api_post_config(httpd_req_t *req)
     return ESP_OK;
 }
 
-/* POST /api/reset  一键清空配置并重启（回到 AP 配网模式） */
+/* POST /api/reset  一键清空配置并重启（重启后需在设备端「系统 → WiFi」页重连 Wi-Fi） */
 static esp_err_t api_reset(httpd_req_t *req)
 {
     if (config_reset() != ESP_OK) {

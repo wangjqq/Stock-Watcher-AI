@@ -24,7 +24,7 @@ Stock-Watcher-AI/
 │       │   ├── app_config.c/.h    # 配置模型 + NVS 存取 + JSON 序列化
 │       │   └── version.h          # 固件版本号
 │       ├── network/           # 网络
-│       │   ├── wifi_manager.c/.h  # AP 配网 / STA 连接 / mDNS
+│       │   ├── wifi_manager.c/.h  # 纯 STA 连接 / 扫描 / mDNS（无 AP 配网）
 │       │   ├── http_server.c/.h   # 内置 HTTP 服务：REST API + 内嵌静态页面
 │       │   └── data_fetcher.c/.h  # 请求外部股票数据接口
 │       ├── data/              # 数据解析与格式化
@@ -109,9 +109,8 @@ idf.py -p COMx write_partition --partition-name fonts --partition-offset 0xC1300
 
 ## 使用流程
 
-1. **配网**：设备未配置 Wi-Fi 时开启热点 `StockWatcher-xxxx`（密码 `12345678`），
-   连上热点后访问 `http://192.168.4.1`，在「设备设置」中填写 Wi-Fi 并保存，
-   设备会自动切换网络连接（无需重启）。
+1. **配网**：设备未配置 Wi-Fi 时处于 STA 待机。在设备屏幕「系统 → WiFi」页扫描附近网络、
+   选择网络并输入密码（触摸软键盘）即可连接，连接成功后自动保存配置（重启自动重连）。
 2. **访问**：设备接入局域网后，通过 `http://stockwatcher.local`（mDNS）或设备 IP 打开配置页。
 3. **配置接口**：在「接口配置」新增数据接口，填写名称、地址和**该接口独立的刷新时间**，点击「测试」自动解析返回的 JSON 字段。支持多个接口。
 4. **选择字段**：在「字段解析」选择数据源接口，测试/解析字段，勾选要显示的字段，添加到**当前目标应用**的显示列表（自动绑定当前数据源）。
@@ -131,7 +130,7 @@ idf.py -p COMx write_partition --partition-name fonts --partition-offset 0xC1300
 | ---- | ------------------- | ---------------------------------------------------- |
 | GET  | /api/config         | 读取配置                                             |
 | POST | /api/config         | 保存配置（JSON body，WiFi 变更后自动重连，无需重启） |
-| POST | /api/reset          | 一键清空配置并重启（回到 AP 配网模式）               |
+| POST | /api/reset          | 一键清空配置并重启（重启后需在设备端「系统 → WiFi」页重连 Wi-Fi） |
 | POST | /api/interface/test | 测试接口并解析字段，body: `{"url": "..."}`           |
 | GET  | /api/fields         | 最近一次测试解析出的字段                             |
 | GET  | /api/status         | 设备状态（连接/IP/运行时间）                         |
@@ -151,7 +150,7 @@ idf.py -p COMx write_partition --partition-name fonts --partition-offset 0xC1300
 - 多接口、多股票（JSON 对象/数组自动解析），每个接口独立刷新频率
 - 字段选择与格式化（颜色/百分号/小数位/单位）
 - 像素画布屏幕布局（128×144，含顶部状态栏）
-- AP 配网 + 局域网（mDNS）访问
+- 设备端「系统 → WiFi」手动连接（扫描 / 软键盘输密码）+ 局域网（mDNS）访问
 - 配置本地保存（NVS）、重启复用
 
 ## 第二阶段：升级规划（P0 → P2 全量排期）

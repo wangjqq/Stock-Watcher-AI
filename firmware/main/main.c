@@ -26,6 +26,7 @@
 #include "touch.h"
 #include "version.h"
 #include "wifi_manager.h"
+#include "wifi_ui.h"
 
 #define FETCH_BUF_SIZE    4096
 #define FETCH_TIMEOUT_MS  5000
@@ -265,6 +266,9 @@ static void on_system_input(knob_event_t ev)
                 s_manual_refresh = true; /* 主循环立即重新拉取全部接口 */
             } else if (s_sys_cursor == 2) {
                 s_sys = SYS_VIEW_STATUS;
+            } else if (s_sys_cursor == 3) {
+                s_sys = SYS_VIEW_WIFI; /* 设备端 WiFi 连接页 */
+                wifi_ui_enter();
             } else {
                 s_sys = SYS_VIEW_CAL; /* 触摸标定 */
                 s_cal_done_ms = 0;
@@ -314,6 +318,11 @@ static void on_system_input(knob_event_t ev)
         default:
             break;
         }
+        break;
+
+    case SYS_VIEW_WIFI:
+        /* WiFi 页内旋钮（移动光标/确认/返回）由页面自己处理 */
+        wifi_ui_knob(ev);
         break;
 
     case SYS_VIEW_CAL:
@@ -377,6 +386,12 @@ static void on_touch_ev(const touch_event_t *ev)
 
     /* 标定页内触摸由主循环按原始坐标处理，这里忽略 */
     if (s_ui == UI_SYSTEM && s_sys == SYS_VIEW_CAL) {
+        return;
+    }
+
+    /* WiFi 页：触摸全部交给页面处理（边缘返回 / 列表点选 / 软键盘点按） */
+    if (s_ui == UI_SYSTEM && s_sys == SYS_VIEW_WIFI) {
+        wifi_ui_touch(ev);
         return;
     }
 
@@ -466,6 +481,9 @@ static void on_touch_ev(const touch_event_t *ev)
                 s_manual_refresh = true;
             } else if (idx == 2) {
                 s_sys = SYS_VIEW_STATUS;
+            } else if (idx == 3) {
+                s_sys = SYS_VIEW_WIFI;
+                wifi_ui_enter();
             } else {
                 s_sys = SYS_VIEW_CAL;
                 s_cal_done_ms = 0;
@@ -473,7 +491,7 @@ static void on_touch_ev(const touch_event_t *ev)
             }
             key_feedback();
         } else {
-            /* 亮度/状态/标定页点按 = 返回菜单（同 OK/BACK） */
+            /* 亮度/状态/标定页点按 = 返回菜单（同 OK/BACK）；WiFi 页已在上方单独处理 */
             s_sys = SYS_VIEW_MENU;
             key_feedback();
         }
@@ -513,6 +531,10 @@ static void render_canvas(const app_config_t *cfg)
     }
 
     if (s_ui == UI_SYSTEM) {
+        if (s_sys == SYS_VIEW_WIFI) {
+            wifi_ui_draw();
+            return;
+        }
         if (s_sys == SYS_VIEW_CAL) {
             app_ui_draw_touch_cal(touch_cal_state());
             return;
@@ -642,6 +664,19 @@ void app_main(void)
                         s_force_redraw = true; /* 标定阶段变化，刷新提示文字 */
                     }
                 }
+            }
+        }
+
+        /* WiFi 页：轮询扫描/连接结果；请求退出时切回系统菜单 */
+        if (s_ui == UI_SYSTEM && s_sys == SYS_VIEW_WIFI) {
+            wifi_ui_tick();
+            if (wifi_ui_need_redraw()) {
+                s_force_redraw = true;
+            }
+            if (wifi_ui_exit_requested()) {
+                wifi_ui_exit();
+                s_sys = SYS_VIEW_MENU;
+                s_force_redraw = true;
             }
         }
 

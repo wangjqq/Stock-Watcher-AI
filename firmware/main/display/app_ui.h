@@ -6,12 +6,13 @@
 #include "app_config.h"
 
 /* 系统应用内部视图 */
-#define SYS_VIEW_MENU   0 /* 亮度 / 手动刷新 / 状态 / 触摸标定 */
+#define SYS_VIEW_MENU   0 /* 亮度 / 手动刷新 / 状态 / WiFi / 触摸标定 */
 #define SYS_VIEW_BRIGHT 1 /* 调节亮度 */
 #define SYS_VIEW_STATUS 2 /* 显示状态 */
-#define SYS_VIEW_CAL    3 /* 触摸标定 */
+#define SYS_VIEW_WIFI   3 /* 设备端 WiFi 连接页 */
+#define SYS_VIEW_CAL    4 /* 触摸标定 */
 /* 系统应用菜单项数 */
-#define SYS_ITEM_COUNT  4
+#define SYS_ITEM_COUNT  5
 
 /* 在画布区（状态栏以下 240x304）绘制应用列表菜单。
  * names[i] 为第 i 个应用名；count = 用户应用数 + 1（末尾为「系统」应用）；

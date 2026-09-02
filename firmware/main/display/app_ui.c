@@ -78,7 +78,7 @@ void app_ui_draw_system(int view, int cursor, uint8_t brightness, bool auto_brig
 
         display_draw_text(4, STATUS_BAR_HEIGHT + 4, "SYSTEM", 8, COL_TITLE);
 
-        static const char *const labels[SYS_ITEM_COUNT] = { "Brightness", "Refresh", "Status", "TouchCal" };
+        static const char *const labels[SYS_ITEM_COUNT] = { "Brightness", "Refresh", "Status", "WiFi", "TouchCal" };
         const int row_top = STATUS_BAR_HEIGHT + 12;
         const int row_h = 20;
         for (int i = 0; i < SYS_ITEM_COUNT; i++) {

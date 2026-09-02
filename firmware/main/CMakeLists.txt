@@ -25,6 +25,7 @@ idf_component_register(
         "display/display.c"
         "display/font_zh.c"
         "display/app_ui.c"
+        "display/wifi_ui.c"
         "display/layout_renderer.c"
         "display/status_bar.c"
         "hardware/knob.c"
@@ -50,6 +51,7 @@ idf_component_register(
         esp_netif
         esp_http_server
         esp_http_client
+        esp_timer
         json
         mdns
         driver
