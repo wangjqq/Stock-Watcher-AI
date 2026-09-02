@@ -19,6 +19,12 @@ static const char *TAG = "touch";
 #define TOUCH_POLL_MS     15
 /* 点按最长时间：超过视为长按，不触发 tap */
 #define TOUCH_TAP_MAX_MS  400
+/* 滑动最长时间：超过视为拖拽/长按，不触发滑动 */
+#define TOUCH_SWIPE_MAX_MS 1000
+/* 判定为滑动的横向位移阈值（屏幕像素） */
+#define TOUCH_SWIPE_THRESH 40
+/* 左右边缘宽度：从该区域内向内滑视为「返回」手势 */
+#define TOUCH_EDGE_W       32
 /* 单次读取的采样次数（取中值滤波） */
 #define TOUCH_NSAMPLE     3
 
@@ -161,12 +167,18 @@ bool touch_is_calibrated(void)
     return s_cal.valid;
 }
 
-/* 轮询任务：检测一次"按下→抬起"的短点按，抬起来时上报 tap 坐标 */
+/* 轮询任务：按「按下→抬起」判定一次手势。
+ *   - 位移小且时长短 → TAP（用按压中心坐标上报）
+ *   - 横向位移超过阈值 → 左右滑动（方向按起点→终点）
+ *   - 从屏幕左/右边缘向内滑 → 返回手势（TOUCH_SWIPE_BACK）
+ *   - 长按 / 斜向 / 竖直滑动暂不处理 */
 static void touch_task(void *arg)
 {
     (void)arg;
     bool     prev_pressed = false;
     uint32_t press_ms = 0;
+    int      fx = 0, fy = 0;    /* 起点（首采样） */
+    int      lx = 0, ly = 0;    /* 终点（最新采样） */
     int      acc_x = 0, acc_y = 0, n = 0;
 
     for (;;) {
@@ -177,22 +189,48 @@ static void touch_task(void *arg)
         if (pressed && !prev_pressed) {
             prev_pressed = true;
             press_ms = (uint32_t)(esp_timer_get_time() / 1000);
-            acc_x = rx;
-            acc_y = ry;
-            n = 1;
+            fx = rx; fy = ry; lx = rx; ly = ry;
+            acc_x = rx; acc_y = ry; n = 1;
         } else if (pressed) {
-            acc_x += rx;
-            acc_y += ry;
-            n++;
+            lx = rx; ly = ry;
+            acc_x += rx; acc_y += ry; n++;
         } else if (!pressed && prev_pressed) {
             prev_pressed = false;
-            uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
-            if (n > 0 && (now_ms - press_ms) <= TOUCH_TAP_MAX_MS) {
-                int sx, sy;
-                if (raw_to_screen(acc_x / n, acc_y / n, &sx, &sy) && s_handler) {
-                    s_handler(sx, sy);
-                }
+            if (!s_handler) {
+                continue;
             }
+            int sx, sy, ex, ey;
+            if (!raw_to_screen(fx, fy, &sx, &sy) || !raw_to_screen(lx, ly, &ex, &ey)) {
+                continue; /* 未标定或坐标无效，不产生事件 */
+            }
+            uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+            uint32_t dur = now_ms - press_ms;
+            int dx = ex - sx;
+            int dy = ey - sy;
+            int adx = dx < 0 ? -dx : dx;
+            int ady = dy < 0 ? -dy : dy;
+
+            touch_event_t ev = { 0 };
+            ev.x = sx; ev.y = sy; ev.ex = ex; ev.ey = ey;
+
+            if (adx < TOUCH_SWIPE_THRESH && ady < TOUCH_SWIPE_THRESH && dur <= TOUCH_TAP_MAX_MS) {
+                /* 短按：以按压中心作为坐标 */
+                if (n > 0) {
+                    raw_to_screen(acc_x / n, acc_y / n, &ev.x, &ev.y);
+                }
+                ev.ev = TOUCH_TAP;
+            } else if (adx >= TOUCH_SWIPE_THRESH && adx > ady && dur <= TOUCH_SWIPE_MAX_MS) {
+                /* 横向滑动：从左右边缘向内滑 = 返回 */
+                if ((sx < TOUCH_EDGE_W && dx > 0) ||
+                        (sx >= TOUCH_SCREEN_W - TOUCH_EDGE_W && dx < 0)) {
+                    ev.ev = TOUCH_SWIPE_BACK;
+                } else {
+                    ev.ev = (dx > 0) ? TOUCH_SWIPE_RIGHT : TOUCH_SWIPE_LEFT;
+                }
+            } else {
+                continue; /* 长按 / 斜向 / 竖直滑动：暂不处理 */
+            }
+            s_handler(&ev);
         }
     }
 }

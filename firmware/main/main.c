@@ -360,22 +360,66 @@ static int row_hit(int y, int row_top, int row_h, int count)
     return (idx >= 0 && idx < count) ? idx : -1;
 }
 
-/* 触摸 tap 事件：按当前界面状态点选。
- * 菜单/系统菜单按行命中打开；应用内点按切换下一个应用。 */
-static void on_touch_tap(int x, int y)
-{
-    (void)x;
+/* 应用内返回按钮位于状态栏最左侧（宽度 STATUS_BAR_BTN_W，见 display.h），
+ * 点击回列表；状态栏由 status_bar 每秒重绘时带上按钮。 */
 
+/* 触摸事件入口：按当前界面状态处理 点按 / 左右滑动 / 边缘返回。
+ *  - 点按：菜单/系统菜单按行命中打开；应用内点状态栏最左返回按钮回列表，其余区域切换下一个应用
+ *  - 左右滑：菜单/系统菜单移动光标；应用内切换上一个/下一个应用
+ *  - 边缘向内滑（左缘右滑 / 右缘左滑）= 返回上一级 */
+static void on_touch_ev(const touch_event_t *ev)
+{
     /* 任何触摸都视为活动：重置休眠计时；休眠中被唤醒 */
     s_last_activity_ms = (uint32_t)(esp_timer_get_time() / 1000);
     if (s_screen_asleep) {
         wake_screen();
     }
 
-    /* 标定页内触摸由主循环按原始坐标处理，这里忽略 tap */
+    /* 标定页内触摸由主循环按原始坐标处理，这里忽略 */
     if (s_ui == UI_SYSTEM && s_sys == SYS_VIEW_CAL) {
         return;
     }
+
+    /* ---- 边缘向内滑 = 返回 ---- */
+    if (ev->ev == TOUCH_SWIPE_BACK) {
+        if (s_ui == UI_APP) {
+            s_ui = UI_MENU;
+            s_cursor = s_current_app; /* 回到列表并停在刚打开的应用上 */
+        } else if (s_ui == UI_SYSTEM) {
+            if (s_sys == SYS_VIEW_MENU) {
+                s_ui = UI_MENU;
+                s_cursor = s_menu_count - 1; /* 回列表并停在「系统」 */
+            } else {
+                s_sys = SYS_VIEW_MENU; /* 亮度/状态/标定页 → 系统菜单 */
+            }
+        } else {
+            return; /* 已在根菜单，无操作 */
+        }
+        key_feedback();
+        return;
+    }
+
+    /* ---- 左右滑动：移动光标 / 切换应用 ---- */
+    if (ev->ev == TOUCH_SWIPE_LEFT || ev->ev == TOUCH_SWIPE_RIGHT) {
+        int dir = (ev->ev == TOUCH_SWIPE_RIGHT) ? 1 : -1;
+        if (s_ui == UI_MENU) {
+            s_cursor = (uint32_t)((s_cursor + s_menu_count + dir) % s_menu_count);
+        } else if (s_ui == UI_APP) {
+            s_current_app = (uint32_t)((s_current_app + s_app_count + dir) % s_app_count);
+        } else if (s_ui == UI_SYSTEM && s_sys == SYS_VIEW_MENU) {
+            s_sys_cursor = (uint32_t)((s_sys_cursor + SYS_ITEM_COUNT + dir) % SYS_ITEM_COUNT);
+        } else {
+            return; /* 系统子页滑动不处理 */
+        }
+        key_feedback();
+        return;
+    }
+
+    /* ---- 点按 ---- */
+    if (ev->ev != TOUCH_TAP) {
+        return;
+    }
+    int x = ev->x, y = ev->y;
 
     if (s_ui == UI_MENU) {
         int idx = row_hit(y, STATUS_BAR_HEIGHT + 14, 16, (int)s_menu_count);
@@ -396,7 +440,14 @@ static void on_touch_tap(int x, int y)
     }
 
     if (s_ui == UI_APP) {
-        /* 应用内点按任意位置 → 切换下一个用户应用 */
+        /* 状态栏最左侧返回按钮 → 回应用列表 */
+        if (x < STATUS_BAR_BTN_W && y < STATUS_BAR_HEIGHT) {
+            s_ui = UI_MENU;
+            s_cursor = s_current_app;
+            key_feedback();
+            return;
+        }
+        /* 其余区域 → 切换下一个用户应用 */
         s_current_app = (s_current_app + 1) % s_app_count;
         key_feedback();
         return;
@@ -514,7 +565,7 @@ void app_main(void)
 
     /* 输入统一走这里：按当前界面状态（菜单 / 应用 / 系统）分发 */
     knob_set_handler(on_input);
-    touch_set_handler(on_touch_tap);
+    touch_set_handler(on_touch_ev);
 
     uint32_t last_status_ms = 0;
 
@@ -625,9 +676,11 @@ void app_main(void)
         /* 状态灯：按网络/涨跌/刷新/告警输出颜色 */
         indicator_update(wifi_manager_is_connected());
 
-        /* 状态栏每秒刷新一次并整屏刷 LCD */
+        /* 状态栏每秒刷新一次并整屏刷 LCD。
+         * 应用内状态栏最左显示返回按钮（右移时间），其他页面不显示 */
         if (now_ms - last_status_ms >= 1000) {
             last_status_ms = now_ms;
+            status_bar_set_left((s_ui == UI_APP) ? STATUS_BAR_BTN_W : 0);
             status_bar_draw();
             display_update();
         }

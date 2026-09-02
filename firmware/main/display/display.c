@@ -507,16 +507,34 @@ static int rssi_bars(int rssi)
     return 0;
 }
 
-void display_draw_status_bar(const char *time_str, int rssi_dbm, int battery_pct)
+/* 状态栏左侧返回箭头（‹ 形状，用三段斜线近似） */
+static void draw_back_arrow(int cx, int cy)
+{
+    uint16_t w = RGB565(0xFF, 0xFF, 0xFF);
+    display_fill_rect(cx, cy, 2, 3, w);
+    display_fill_rect(cx + 2, cy - 1, 2, 3, w);
+    display_fill_rect(cx + 4, cy - 2, 2, 3, w);
+}
+
+void display_draw_status_bar(const char *time_str, int rssi_dbm, int battery_pct, int left_w)
 {
     static const uint32_t FG = 0xFFFFFF;
     static const uint32_t BAR_BG = 0x111111;
 
     fb_fill_rect(0, 0, DISPLAY_WIDTH, STATUS_BAR_HEIGHT, RGB565(0x11, 0x11, 0x11));
 
-    /* 左侧：时间 */
+    /* 左侧：返回按钮占位（left_w>0 时）→ 时间右移，避免重叠 */
+    int tx = 2;
+    if (left_w > 0) {
+        if (left_w > DISPLAY_WIDTH) {
+            left_w = DISPLAY_WIDTH;
+        }
+        fb_fill_rect(0, 0, left_w, STATUS_BAR_HEIGHT, RGB565(0x22, 0x22, 0x22));
+        draw_back_arrow(8, STATUS_BAR_HEIGHT / 2 - 2);
+        tx = left_w + 2;
+    }
     if (time_str) {
-        display_draw_text(2, 4, time_str, 8, FG);
+        display_draw_text(tx, 4, time_str, 8, FG);
     }
 
     /* 右侧：信号（4 格） */

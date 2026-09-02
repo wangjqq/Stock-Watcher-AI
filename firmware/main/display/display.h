@@ -17,6 +17,9 @@
 #define CANVAS_WIDTH        240
 #define CANVAS_HEIGHT       (DISPLAY_HEIGHT - STATUS_BAR_HEIGHT)  /* 304 */
 
+/* 状态栏最左侧返回按钮宽度（应用内显示，点击回列表） */
+#define STATUS_BAR_BTN_W    26
+
 /* 初始化屏幕，brightness 为初始背光亮度 0-100 */
 esp_err_t display_init(uint8_t brightness);
 
@@ -36,8 +39,9 @@ void display_draw_text(int x, int y, const char *text, int font_size, uint32_t c
  * 返回整行像素宽（不含起始 x）。 */
 int display_draw_text_zh(int x, int y, const char *text, int scale, uint32_t color);
 
-/* 状态栏（顶部 16px）：左边时间，右边信号(4格)+电池。由 status_bar 定时调用 */
-void display_draw_status_bar(const char *time_str, int rssi_dbm, int battery_pct);
+/* 状态栏（顶部 16px）：左边时间，右边信号(4格)+电池。由 status_bar 定时调用。
+ * left_w：状态栏最左侧预留宽度（>0 时绘制返回按钮并把时间右移），0=不预留 */
+void display_draw_status_bar(const char *time_str, int rssi_dbm, int battery_pct, int left_w);
 
 /* 把帧缓冲整屏刷到 LCD */
 void display_update(void);

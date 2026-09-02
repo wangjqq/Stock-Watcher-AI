@@ -14,6 +14,12 @@
 static const char *TAG = "status";
 
 static bool s_sntp_started = false;
+static int  s_left_w = 0; /* 状态栏最左侧预留宽度（应用内返回按钮用） */
+
+void status_bar_set_left(int w)
+{
+    s_left_w = (w > 0) ? w : 0;
+}
 
 void status_bar_start_sntp(void)
 {
@@ -50,5 +56,5 @@ void status_bar_draw(void)
         snprintf(time_str, sizeof(time_str), "U%02d:%02d", h, m);
     }
 
-    display_draw_status_bar(time_str, wifi_manager_get_rssi(), battery_get_percent());
+    display_draw_status_bar(time_str, wifi_manager_get_rssi(), battery_get_percent(), s_left_w);
 }

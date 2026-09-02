@@ -21,13 +21,28 @@
 #define TOUCH_SCREEN_W 240
 #define TOUCH_SCREEN_H 320
 
-/* 触摸事件回调：一次点按（tap），坐标为屏幕像素（含顶部状态栏区域 0..W-1 / 0..H-1） */
-typedef void (*touch_handler_t)(int x, int y);
+/* 触摸事件类型 */
+typedef enum {
+    TOUCH_TAP = 0,        /* 短按：位移小且时长短（点选/确认） */
+    TOUCH_SWIPE_LEFT,     /* 中部向左滑（切上一个 / 光标上移） */
+    TOUCH_SWIPE_RIGHT,    /* 中部向右滑（切下一个 / 光标下移） */
+    TOUCH_SWIPE_BACK,     /* 边缘向内滑（左缘右滑 / 右缘左滑）= 返回 */
+} touch_ev_t;
+
+/* 触摸事件：坐标为屏幕像素（含顶部状态栏区域 0..W-1 / 0..H-1） */
+typedef struct {
+    touch_ev_t ev;
+    int x, y;    /* 起点（tap 为按压中心） */
+    int ex, ey;  /* 终点（滑动用） */
+} touch_event_t;
+
+/* 触摸事件回调 */
+typedef void (*touch_handler_t)(const touch_event_t *ev);
 
 /* 初始化：注册到 LCD 共享 SPI 总线 + 配置 IRQ + 读取 NVS 标定 + 启动轮询任务 */
 esp_err_t touch_init(void);
 
-/* 注册 tap 回调（只支持一个，传入 NULL 清除） */
+/* 注册触摸事件回调（只支持一个，传入 NULL 清除） */
 void touch_set_handler(touch_handler_t cb);
 
 /* 立即读取一次触摸：按标定映射为屏幕像素坐标；有按下返回 true。
