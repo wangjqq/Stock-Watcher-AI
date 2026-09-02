@@ -1,4 +1,5 @@
 #include "display.h"
+#include "font_zh.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -407,6 +408,64 @@ void display_draw_text(int x, int y, const char *text, int font_size, uint32_t c
         }
         cx += adv;
     }
+}
+
+/* ---------------- 中英混排文本（16px 高） ---------------- */
+
+/* 绘制单个 16x16 汉字字模（g 为 32 字节，每行 2 字节高位在前） */
+static void draw_zh_glyph(int x, int y, const uint8_t *g, int scale, uint16_t color)
+{
+    for (int gy = 0; gy < 16; gy++) {
+        uint8_t lo = g[gy * 2];     /* 左 8 像素 */
+        uint8_t hi = g[gy * 2 + 1]; /* 右 8 像素 */
+        for (int gx = 0; gx < 8; gx++) {
+            if (lo & (0x80 >> gx)) {
+                fb_fill_rect(x + gx * scale, y + gy * scale, scale, scale, color);
+            }
+            if (hi & (0x80 >> gx)) {
+                fb_fill_rect(x + (8 + gx) * scale, y + gy * scale, scale, scale, color);
+            }
+        }
+    }
+}
+
+int display_draw_text_zh(int x, int y, const char *text, int scale, uint32_t color)
+{
+    if (!text || *text == '\0') {
+        return 0;
+    }
+    if (scale != 2) {
+        scale = 1;
+    }
+    uint16_t c = RGB565((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF);
+    int cx = x;
+    const uint8_t *p = (const uint8_t *)text;
+    while (*p) {
+        if (*p < 0x80) { /* ASCII */
+            unsigned char ch = *p++;
+            if (ch == '\n') {
+                cx = x;
+                continue;
+            }
+            if (ch >= 0x20 && ch <= 0x7E) {
+                draw_char_scaled(cx, y, ch - 0x20, 2.0f * scale, c); /* 8x16 */
+            }
+            cx += 16 * scale;
+        } else if (p[0] >= 0xE0 && p[0] <= 0xEF && p[1] && p[2]) { /* 中文 3 字节 */
+            uint16_t gb = font_zh_utf8_to_gb(p);
+            const uint8_t *g = gb ? font_zh_get_glyph(gb) : NULL;
+            if (g) {
+                draw_zh_glyph(cx, y, g, scale, c);
+            } else {
+                fb_fill_rect(cx, y, 16 * scale, 16 * scale, c); /* 缺字占位 */
+            }
+            p += 3;
+            cx += 16 * scale;
+        } else {
+            p++;
+        }
+    }
+    return cx - x;
 }
 
 /* ---------------- 状态栏（顶部 16px） ---------------- */

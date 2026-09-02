@@ -82,6 +82,27 @@ idf.py -p COMx flash monitor
 > 之后每次 `idf.py build` 生成的 `build/*.bin`（app 镜像，含内嵌网页）可直接在
 > 网页「固件升级」页上传，实现 OTA 免插线升级。
 
+#### 中文字库分区（一次性烧录）
+
+中文字库放在独立 `fonts` 数据分区（0xC13000，512KB），不随固件 OTA 更新。
+
+```bash
+# 1. 生成字库与映射表（Python 3 + 可选 Pillow；有 tools/HZK16.bin 则无需 Pillow）
+python tools/gen_font.py        # 产物：main/common/font_zh_table.c + build/fonts.bin
+
+# 2. 编译固件（映射表已生成后）
+idf.py build
+
+# 3. 烧录固件 + 字库分区
+idf.py -p COMx flash
+idf.py -p COMx write_partition --partition-name fonts --partition-offset 0xC13000 --input build/fonts.bin
+```
+
+- `font_zh_table.c`（Unicode→GB2312 映射表，纯标准库生成）是编译固件的**前置**，首次需先跑一次
+- `build/fonts.bin` 若生成为全 0 占位（未装 Pillow 也无 HZK16.bin），固件可编译运行，
+  中文会显示为方块，装好字体或放入 HZK16.bin 后重跑即可
+- 字库只更新分区文件，**无需**重新 OTA 固件
+
 > 前端产物由 `firmware/tools/gen_web_assets.py` 在固件配置阶段生成 `web_assets.c`
 > 以字节数组直接内嵌进固件二进制，ESP32 通过 HTTP 服务在内存中发送给浏览器，
 > 不再依赖 SPIFFS 文件系统（体积更小、更可靠）。
@@ -220,7 +241,8 @@ idf.py -p COMx flash monitor
 - [ ] **跑马灯/滚动条**：长文本与多股票横向滚动轮播，一屏装更多信息
 - [ ] **迷你 K 线**：本地滚动记录历史数据，绘制分时 / 日 K 迷你图（128×160 也画得下）
 - [ ] **主题系统**：预设 / 自定义配色方案，红涨绿跌 / 绿涨红跌一键切换
-- [ ] **中文字库**：内置 GB2312 点阵字库，彻底告别中文方块字（当前 8×8 ASCII 点阵不支持中文）
+- [x] **中文字库**：内置 GB2312 一级汉字 16×16 点阵字库（独立 fonts 分区 + mmap 直读），
+  widget 标签 / 应用名等中文不再显示为方块（缺字退化为方块；字库生成见下方「字库分区」）
 - [ ] **大屏适配**（可选硬件：ILI9341 320×240）：布局按分辨率自动缩放，小屏配置无缝迁移到大屏
 
 ### P3-D 会联网：连接与生态

@@ -15,6 +15,7 @@
 #include "data_fetcher.h"
 #include "display.h"
 #include "field_parser.h"
+#include "font_zh.h"
 #include "http_server.h"
 #include "indicator.h"
 #include "knob.h"
@@ -400,6 +401,7 @@ void app_main(void)
     indicator_init();
     battery_init();      /* ADC 电池电量（状态栏显示） */
     light_sensor_init(); /* BH1750 光敏（自动亮度） */
+    font_zh_init();      /* GB2312 一级汉字字库（mmap fonts 分区，缺失时中文退化为方块） */
     wifi_manager_init(&cfg);
     wifi_manager_start_mdns("stockwatcher");
     http_server_start();

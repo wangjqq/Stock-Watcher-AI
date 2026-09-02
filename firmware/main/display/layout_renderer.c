@@ -60,7 +60,9 @@ void layout_render(const app_config_t *cfg, uint32_t app_index, const char *cons
         } else {
             snprintf(line, sizeof(line), "%s", out.text);
         }
-        display_draw_text(w->x, w->y + STATUS_BAR_HEIGHT, line, w->font_size, out.color);
+        /* 中英混排（widget 标签可为中文）：字号 >=32 用 32px，否则 16px */
+        display_draw_text_zh(w->x, w->y + STATUS_BAR_HEIGHT, line,
+                             (w->font_size >= 32) ? 2 : 1, out.color);
     }
 
     for (uint32_t i = 0; i < CONFIG_INTERFACE_MAX; i++) {

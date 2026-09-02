@@ -15,6 +15,7 @@ idf_component_register(
     SRCS
         "main.c"
         "common/app_config.c"
+        "common/font_zh_table.c"
         "network/wifi_manager.c"
         "network/http_server.c"
         "network/ota.c"
@@ -22,6 +23,7 @@ idf_component_register(
         "data/field_parser.c"
         "data/formatter.c"
         "display/display.c"
+        "display/font_zh.c"
         "display/app_ui.c"
         "display/layout_renderer.c"
         "display/status_bar.c"

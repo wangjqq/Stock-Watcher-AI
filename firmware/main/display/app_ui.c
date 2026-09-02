@@ -49,15 +49,16 @@ void app_ui_draw_menu(const char names[][CONFIG_NAME_MAX], int count, int cursor
     clear_canvas();
     display_draw_text(4, STATUS_BAR_HEIGHT + 4, "APPS", 8, COL_TITLE);
 
+    /* 应用名可为中文：用 16px 中文混排，行距 16px（画布 144px 最多 8 行，与 CONFIG_APP_MAX 一致） */
     const int row_top = STATUS_BAR_HEIGHT + 14;
-    const int row_h = 14;
-    for (int i = 0; i < count && row_top + i * row_h + 12 <= DISPLAY_HEIGHT; i++) {
+    const int row_h = 16;
+    for (int i = 0; i < count && row_top + i * row_h + 16 <= DISPLAY_HEIGHT; i++) {
         int ry = row_top + i * row_h;
         if (i == cursor) {
-            display_fill_rect(2, ry, CANVAS_WIDTH - 4, 12, COL_HL_BG);
-            display_draw_text(8, ry + 2, names[i], 8, COL_FG);
+            display_fill_rect(2, ry, CANVAS_WIDTH - 4, 16, COL_HL_BG);
+            display_draw_text_zh(8, ry, names[i], 1, COL_FG);
         } else {
-            display_draw_text(8, ry + 2, names[i], 8, COL_DIM);
+            display_draw_text_zh(8, ry, names[i], 1, COL_DIM);
         }
     }
 }
