@@ -10,6 +10,24 @@ function rssiTag(rssi: number) {
   return <Tag color="red">弱</Tag>
 }
 
+/** 崩溃原因码 → 中文描述（与固件 esp_reset_reason_t 对应，见 crashlog.c） */
+const CRASH_REASON_TEXT: Record<number, string> = {
+  4: '程序异常 Panic',
+  5: '中断看门狗超时',
+  6: '任务看门狗超时',
+  7: '看门狗复位',
+  9: '电压跌落 Brownout',
+  14: '电源波动 Power Glitch',
+  15: 'CPU 锁死 Lockup',
+}
+
+/** 最后崩溃原因展示（有崩溃记录时映射为中文，未知码回退固件返回的短描述） */
+function crashReasonText(st: DeviceStatus | null) {
+  if (!st) return '-'
+  if (!st.crash_count || st.last_crash_code === 0) return '无异常复位记录'
+  return CRASH_REASON_TEXT[st.last_crash_code] ?? (st.last_crash_reason || '未知原因')
+}
+
 function fmtUptime(ms: number) {
   const s = Math.floor(ms / 1000)
   const h = Math.floor(s / 3600)
@@ -90,6 +108,31 @@ export default function SystemStatus() {
           </Descriptions.Item>
           <Descriptions.Item label="密码">无（开放网络）</Descriptions.Item>
           <Descriptions.Item label="说明">手机/电脑连接该热点后，即可访问配置页</Descriptions.Item>
+        </Descriptions>
+      </Card>
+
+      <Card title="稳定性 / 崩溃日志" style={{ marginTop: 16 }}>
+        <Descriptions column={2} bordered size="small">
+          <Descriptions.Item label="崩溃次数">
+            {st ? (
+              st.crash_count > 0 ? (
+                <Tag color="red">{st.crash_count}</Tag>
+              ) : (
+                <Tag color="green">0</Tag>
+              )
+            ) : (
+              '-'
+            )}
+          </Descriptions.Item>
+          <Descriptions.Item label="最后崩溃原因">
+            <Tag color={st && st.crash_count > 0 ? 'orange' : 'default'}>{crashReasonText(st)}</Tag>
+          </Descriptions.Item>
+          <Descriptions.Item label="自动重启">
+            <Badge status="processing" text="看门狗已启用（程序异常自动重启）" />
+          </Descriptions.Item>
+          <Descriptions.Item label="统计口径">
+            仅统计异常复位（程序异常 / 看门狗超时 / 电压跌落等），正常重启、深度睡眠与掉电不计
+          </Descriptions.Item>
         </Descriptions>
       </Card>
     </div>

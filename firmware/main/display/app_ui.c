@@ -67,7 +67,8 @@ void app_ui_draw_menu(const char names[][CONFIG_NAME_MAX], int count, int cursor
 void app_ui_draw_system(int view, int cursor, uint8_t brightness, bool auto_brightness,
                         bool wifi_ok, int rssi, const char *ip,
                         const char *ap_ssid, const char *ap_ip,
-                        const char *version, bool refreshing)
+                        const char *version, bool refreshing,
+                        uint32_t crash_count, const char *crash_reason)
 {
     clear_canvas();
 
@@ -141,6 +142,15 @@ void app_ui_draw_system(int view, int cursor, uint8_t brightness, bool auto_brig
         display_draw_text(8, y, wifi_ok ? "WiFi ON" : "WiFi OFF", 8,
                           wifi_ok ? COL_OK : COL_ERR);
         y += 16;
+        /* 崩溃统计：累计异常复位次数 + 最后崩溃原因（有崩溃记录时显示原因） */
+        snprintf(line, sizeof(line), "Crashes: %u", (unsigned)crash_count);
+        display_draw_text(8, y, line, 8, crash_count ? COL_ERR : COL_FG);
+        if (crash_count > 0 && crash_reason && crash_reason[0]) {
+            y += 16;
+            snprintf(line, sizeof(line), "Last: %s", crash_reason);
+            display_draw_text(8, y, line, 8, COL_FG);
+        }
+        y += 16;
         display_draw_text(8, y, "OK/BACK: back", 8, COL_DIM);
         return;
     }
@@ -203,7 +213,7 @@ void app_ui_draw_qr(void)
  * 内容与网页「用户手册」一致的精简版。每行不超过 28 字符（240 宽 / 8px）。
  * 新增 / 修改 / 删除功能时，请同步更新这里与 web/src/pages/UserManual.tsx。 */
 
-#define MANUAL_LINES 12 /* 每页最大行数 */
+#define MANUAL_LINES 13 /* 每页最大行数（每页固定补足 MANUAL_LINES 行，空串占位，避免 NULL） */
 
 static const char *const s_manual_pages[MANUAL_PAGES][MANUAL_LINES] = {
     {
@@ -218,6 +228,8 @@ static const char *const s_manual_pages[MANUAL_PAGES][MANUAL_LINES] = {
         "Swipe or rotate knob",
         "to browse pages.",
         "OK/BACK: exit manual",
+        "",
+        "",
     },
     {
         "== CONFIG ==",
@@ -231,17 +243,23 @@ static const char *const s_manual_pages[MANUAL_PAGES][MANUAL_LINES] = {
         "test, pick fields,",
         "drag layout, save",
         "Multi-stock supported",
+        "",
+        "",
     },
     {
         "== SYSTEM MENU ==",
         "Brightness: knob set",
         "Refresh: fetch now",
-        "Status: IP/RSSI/AP/Ver",
+        "Status: IP/RSSI/AP/Ver,",
+        "   + crash count/reason",
         "WiFi: join network",
         "QR: scan -> web page",
         "TouchCal: calibrate if",
         "   touch is off-center",
         "Manual: this page",
+        "",
+        "",
+        "",
     },
     {
         "== POWER & ALERTS ==",
@@ -256,6 +274,7 @@ static const char *const s_manual_pages[MANUAL_PAGES][MANUAL_LINES] = {
         "   beep + LED + banner",
         "Screen-sleep keeps data",
         "   fetching alive",
+        "",
     },
     {
         "== POWER SAVE ==",
@@ -271,6 +290,21 @@ static const char *const s_manual_pages[MANUAL_PAGES][MANUAL_LINES] = {
         "   resumes when charged",
         "No battery (USB): the",
         "   protection is off",
+    },
+    {
+        "== RELIABILITY ==",
+        "Watchdog: main loop",
+        "   auto-restart if hung",
+        "Crash log: crash count",
+        "   + last reason (NVS),",
+        "   shown on Status page",
+        "   and web System Status",
+        "Normal reboot / deep",
+        "   sleep / power-on:",
+        "   not counted as crash",
+        "",
+        "",
+        "",
     },
 };
 

@@ -12,6 +12,7 @@
 #include "freertos/task.h"
 
 #include "app_config.h"
+#include "crashlog.h"
 #include "data_fetcher.h"
 #include "field_parser.h"
 #include "ota.h"
@@ -294,6 +295,11 @@ static esp_err_t api_get_status(httpd_req_t *req)
     cJSON_AddStringToObject(root, "ap_ip", ap_ip);
     cJSON_AddStringToObject(root, "firmware_version", FW_VERSION);
     cJSON_AddNumberToObject(root, "uptime_ms", esp_timer_get_time() / 1000);
+    /* 崩溃统计：累计异常复位次数与最后崩溃原因（正常重启/深度睡眠不计） */
+    cJSON_AddNumberToObject(root, "crash_count", (double)crashlog_get_count());
+    cJSON_AddNumberToObject(root, "last_crash_code", crashlog_get_last_code());
+    cJSON_AddStringToObject(root, "last_crash_reason",
+                            crashlog_reason_str(crashlog_get_last_code()));
     char *out = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     httpd_resp_set_type(req, "application/json");

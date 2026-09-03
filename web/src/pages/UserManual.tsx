@@ -5,6 +5,7 @@ import {
   CheckCircleOutlined,
   QuestionCircleOutlined,
   RocketOutlined,
+  SafetyCertificateOutlined,
   SettingOutlined,
 } from '@ant-design/icons'
 
@@ -172,6 +173,26 @@ const sections = [
         <Paragraph>
           <Text strong>电量与背光：</Text>
           支持电池电压采集与 PWM 调光，自动亮度由光敏传感器接管。
+        </Paragraph>
+      </>
+    ),
+  },
+  {
+    key: 'stability',
+    icon: <SafetyCertificateOutlined />,
+    label: '稳定性与崩溃日志',
+    content: (
+      <>
+        <Paragraph>
+          <Text strong>看门狗：</Text>
+          设备内置任务看门狗，若主循环任务异常卡死（如数据拉取挂起），超过设定时间会自动重启设备恢复运行，
+          避免长时间无响应。
+        </Paragraph>
+        <Paragraph>
+          <Text strong>崩溃日志：</Text>
+          设备会把<Text strong>累计崩溃次数</Text>与<Text strong>最后崩溃原因</Text>（程序异常、任务/中断看门狗
+          超时、电压跌落、CPU 锁死等）保存在 NVS 中。可在网页「系统状态」页或设备端「系统 → Status」页查看。
+          正常重启、深度睡眠与掉电不计入崩溃次数。
         </Paragraph>
       </>
     ),

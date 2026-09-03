@@ -97,4 +97,10 @@ export interface DeviceStatus {
   ap_ip: string
   firmware_version: string
   uptime_ms: number
+  /** 累计异常复位（崩溃）次数 */
+  crash_count: number
+  /** 最后崩溃原因码（esp_reset_reason_t），0 = 从未异常复位 */
+  last_crash_code: number
+  /** 最后崩溃原因（ASCII 短描述） */
+  last_crash_reason: string
 }

@@ -7,6 +7,7 @@
 #include "esp_partition.h"
 #include "esp_pm.h"
 #include "esp_sleep.h"
+#include "esp_task_wdt.h"
 #include "esp_timer.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
@@ -17,6 +18,7 @@
 #include "app_ui.h"
 #include "battery.h"
 #include "buzzer.h"
+#include "crashlog.h"
 #include "data_fetcher.h"
 #include "display.h"
 #include "field_parser.h"
@@ -36,6 +38,9 @@
 
 #define FETCH_BUF_SIZE    4096
 #define FETCH_TIMEOUT_MS  5000
+/* 单轮循环内累计拉取时间预算：须小于任务看门狗超时（10s），
+ * 防止多接口同时超时时拉取时间过长、被看门狗误判为崩溃 */
+#define FETCH_BUDGET_MS   8000
 
 /* 每个接口的最近一次数据缓存（按下标与 cfg->interfaces[i] 对应） */
 static char    s_bodies[CONFIG_INTERFACE_MAX][FETCH_BUF_SIZE];
@@ -131,6 +136,32 @@ static void cpu_freq_set(int max_mhz)
 static void pm_init(void)
 {
     cpu_freq_set(240);
+}
+
+/* 任务看门狗：订阅主循环任务，若主循环异常卡死（如数据拉取挂起）超过超时时间，
+ * 由任务看门狗触发 panic 自动重启；重启后 crashlog 会记录「任务看门狗超时」。
+ * 超时设为 10s：单次接口拉取最长约 5s，留足余量避免误触发。
+ * ESP-IDF 默认已在启动时初始化任务看门狗（CONFIG_ESP_TASK_WDT），这里仅调整超时；
+ * 若默认未初始化则手动初始化。 */
+static void wdog_init(void)
+{
+    esp_task_wdt_config_t cfg = {
+        .timeout_ms = 10000,
+        .idle_core_mask = (1 << CONFIG_FREERTOS_NUMBER_OF_CORES) - 1,
+        .trigger_panic = true,
+    };
+    esp_err_t err = esp_task_wdt_reconfigure(&cfg);
+    if (err != ESP_OK) {
+        err = esp_task_wdt_init(&cfg);
+        if (err != ESP_OK) {
+            ESP_LOGW("wdt", "task wdt init failed (%s), skip", esp_err_to_name(err));
+            return;
+        }
+    }
+    err = esp_task_wdt_add(NULL); /* 订阅当前任务（app_main 主循环） */
+    if (err != ESP_OK) {
+        ESP_LOGW("wdt", "task wdt add failed (%s), skip", esp_err_to_name(err));
+    }
 }
 
 /* 屏幕休眠：熄灭背光（数据拉取 / 告警 / 状态栏逻辑继续，盯盘不中断） */
@@ -750,7 +781,9 @@ static void render_canvas(const app_config_t *cfg)
         bool refreshing = (uint32_t)(esp_timer_get_time() / 1000) < s_refresh_feedback_ms;
         app_ui_draw_system(s_sys, (int)s_sys_cursor, s_brightness, s_auto_brightness,
                            wifi_manager_is_connected(), wifi_manager_get_rssi(),
-                           ip, wifi_manager_ap_ssid(), ap_ip, FW_VERSION, refreshing);
+                           ip, wifi_manager_ap_ssid(), ap_ip, FW_VERSION, refreshing,
+                           crashlog_get_count(),
+                           crashlog_reason_str(crashlog_get_last_code()));
         return;
     }
 }
@@ -763,6 +796,9 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+    /* 崩溃日志：根据上次复位原因统计异常复位（panic / 看门狗 / 电压跌落等） */
+    crashlog_init();
 
     /* 打印 NVS 分区实际大小，便于排查配置保存失败（配置 blob 约 60KB，分区太小会存不下） */
     const esp_partition_t *nvs_part =
@@ -801,6 +837,7 @@ void app_main(void)
     wifi_manager_start_mdns("stockwatcher");
     http_server_start();
     pm_init(); /* CPU 空闲自动降频（需 CONFIG_PM_ENABLE） */
+    wdog_init(); /* 任务看门狗：主循环卡死自动重启 */
 
     /* 上电硬件自检：LED 变色 + 蜂鸣（可经 selftest.h 关闭）；深睡唤醒跳过，避免吵醒用户 */
     if (!from_deep_sleep) {
@@ -815,6 +852,7 @@ void app_main(void)
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(100));
+        esp_task_wdt_reset(); /* 喂看门狗：主循环每轮按时运行，卡死时自动重启 */
 
         /* 每次循环重新读取配置，网页保存后即时生效（无需重启） */
         config_load(&cfg);
@@ -979,7 +1017,11 @@ void app_main(void)
             display_update();
         }
 
-        /* 各接口按自己的刷新时间独立拉取（仅在联网时） */
+        /* 各接口按自己的刷新时间独立拉取（仅在联网时）。
+         * 看门狗保护：单轮累计拉取时间不超过 FETCH_BUDGET_MS，且单次拉取超时
+         * 不超过剩余预算，保证主循环能在看门狗超时内喂狗；预算耗尽提前结束
+         * 本轮拉取，下一轮循环继续（多接口同时超时不会触发误重启）。 */
+        uint32_t fetch_budget_left_ms = FETCH_BUDGET_MS;
         bool any_fetched = false;
         if (wifi_manager_is_connected()) {
             for (uint32_t i = 0; i < cfg.interface_count; i++) {
@@ -996,13 +1038,22 @@ void app_main(void)
                 if (now_ms - s_last_ms[i] < it->refresh_interval_ms) {
                     continue;
                 }
+                if (fetch_budget_left_ms == 0) {
+                    break; /* 预算耗尽：下一轮循环再继续，先回去喂看门狗 */
+                }
                 s_last_ms[i] = now_ms;
-                if (data_fetch_iface(it, s_bodies[i], sizeof(s_bodies[i]), FETCH_TIMEOUT_MS) == ESP_OK
+                uint32_t t0 = (uint32_t)(esp_timer_get_time() / 1000);
+                uint32_t timeout = fetch_budget_left_ms < FETCH_TIMEOUT_MS
+                                       ? fetch_budget_left_ms : FETCH_TIMEOUT_MS;
+                if (data_fetch_iface(it, s_bodies[i], sizeof(s_bodies[i]), timeout) == ESP_OK
                         && strlen(s_bodies[i]) > 0) {
                     s_has_body[i] = true;
                     any_fetched = true;
                     indicator_on_refresh(); /* 刷新闪光 */
                 }
+                uint32_t used = (uint32_t)(esp_timer_get_time() / 1000) - t0;
+                fetch_budget_left_ms = (used >= fetch_budget_left_ms) ? 0
+                                                                      : (fetch_budget_left_ms - used);
             }
 
             /* 条件提醒：仅在拉到新数据后评估一次 */

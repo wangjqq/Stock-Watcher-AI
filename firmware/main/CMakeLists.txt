@@ -15,6 +15,7 @@ idf_component_register(
     SRCS
         "main.c"
         "common/app_config.c"
+        "common/crashlog.c"
         "common/font_zh_table.c"
         "network/wifi_manager.c"
         "network/http_server.c"
