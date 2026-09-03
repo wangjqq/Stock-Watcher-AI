@@ -1,8 +1,11 @@
 # 硬件接线说明（PIN 映射）
 
-> 目标芯片：**ESP32-S3 N16R8**（16MB Flash + 8MB Octal PSRAM）。
+> 目标芯片：**ESP32-S3 N16R8**（16MB Flash + 8MB Octal PSRAM），开发板为 **ESP32-S3 NANO**。
 > 本文件是硬件接线的唯一说明，固件中的引脚定义见各模块 `.c` 文件顶部 `PIN_*` 宏，两者保持一致。
 > 构建目标：`idf.py set-target esp32s3`。
+>
+> 开发板资料（排针引出 / 原理图 / 官方例程）：[docs/hardware/esp32s3-nano/README.md](../docs/hardware/esp32s3-nano/README.md)。
+> 本项目所用引脚均已按该开发板排针核对，全部符合。
 >
 > ⚠️ **引脚调整说明（2026-09-02）**：原固件把 LCD MOSI、旋钮 A、LED B 分别定在
 > GPIO23 / GPIO25 / GPIO22，这三个引脚在 ESP32-S3 上并不存在（S3 仅有 GPIO0~21、26~48），
