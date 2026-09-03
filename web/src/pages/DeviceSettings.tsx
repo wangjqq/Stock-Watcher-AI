@@ -9,6 +9,7 @@ interface FormValues {
   password: string
   brightness: number
   auto_brightness: boolean
+  power_save_enabled: boolean
   screen_sleep_enabled: boolean
   screen_sleep_s: number
   auto_rotate_enabled: boolean
@@ -41,6 +42,7 @@ export default function DeviceSettings() {
       password: cfg.password,
       brightness: cfg.brightness,
       auto_brightness: cfg.auto_brightness,
+      power_save_enabled: cfg.power_save_enabled,
       screen_sleep_enabled: (cfg.screen_timeout_s ?? 0) > 0,
       screen_sleep_s: cfg.screen_timeout_s || 60,
       auto_rotate_enabled: (cfg.auto_rotate_s ?? 0) > 0,
@@ -74,6 +76,7 @@ export default function DeviceSettings() {
         password: values.password,
         brightness: values.brightness,
         auto_brightness: values.auto_brightness,
+        power_save_enabled: values.power_save_enabled,
         screen_timeout_s: values.screen_sleep_enabled ? Math.max(1, values.screen_sleep_s) : 0,
         auto_rotate_s: values.auto_rotate_enabled ? Math.max(1, values.auto_rotate_s) : 0,
         deep_sleep_enabled: values.deep_sleep_enabled,
@@ -163,6 +166,14 @@ export default function DeviceSettings() {
           <Slider min={0} max={100} disabled={!!autoBrightness} />
         </Form.Item>
         <Form.Item name="auto_brightness" label="自动亮度（光敏传感器）" valuePropName="checked">
+          <Switch />
+        </Form.Item>
+        <Form.Item
+          name="power_save_enabled"
+          label="省电模式（背光最低 + CPU 降频）"
+          extra="电量低于 20% 时自动进入省电模式；低于 5% 进入深度睡眠并闪烁红光提示"
+          valuePropName="checked"
+        >
           <Switch />
         </Form.Item>
 

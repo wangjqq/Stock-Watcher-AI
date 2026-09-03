@@ -17,7 +17,7 @@
 #define SYS_ITEM_COUNT  7
 
 /* 设备端用户手册分页数（内容见 app_ui.c 的 s_manual_pages） */
-#define MANUAL_PAGES 4
+#define MANUAL_PAGES 5
 
 /* 在画布区（状态栏以下 240x304）绘制应用列表菜单。
  * names[i] 为第 i 个应用名；count = 用户应用数 + 1（末尾为「系统」应用）；

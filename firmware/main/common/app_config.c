@@ -15,6 +15,7 @@ void config_defaults(app_config_t *cfg)
     snprintf(cfg->device_name, sizeof(cfg->device_name), "StockWatcher");
     cfg->brightness = 80;
     cfg->auto_brightness = false;
+    cfg->power_save_enabled = false;
     cfg->buzzer_enabled = true;
     cfg->buzzer_volume = 70;
     /* 深度睡眠：默认关闭；开启时默认夜间 22:00 入睡、次日 08:00 唤醒 */
@@ -142,6 +143,7 @@ char *config_to_json(const app_config_t *cfg)
     cJSON_AddStringToObject(root, "password", cfg->password);
     cJSON_AddNumberToObject(root, "brightness", cfg->brightness);
     cJSON_AddBoolToObject(root, "auto_brightness", cfg->auto_brightness);
+    cJSON_AddBoolToObject(root, "power_save_enabled", cfg->power_save_enabled);
     cJSON_AddNumberToObject(root, "screen_timeout_s", cfg->screen_timeout_s);
     cJSON_AddNumberToObject(root, "auto_rotate_s", cfg->auto_rotate_s);
     cJSON_AddBoolToObject(root, "deep_sleep_enabled", cfg->deep_sleep_enabled);
@@ -278,6 +280,11 @@ esp_err_t config_from_json(const char *json, app_config_t *cfg)
     v = cJSON_GetObjectItem(root, "auto_brightness");
     if (cJSON_IsBool(v)) {
         cfg->auto_brightness = cJSON_IsTrue(v);
+    }
+
+    v = cJSON_GetObjectItem(root, "power_save_enabled");
+    if (cJSON_IsBool(v)) {
+        cfg->power_save_enabled = cJSON_IsTrue(v);
     }
 
     v = cJSON_GetObjectItem(root, "screen_timeout_s");

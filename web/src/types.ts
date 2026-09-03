@@ -56,6 +56,7 @@ export interface AppConfig {
   password: string
   brightness: number
   auto_brightness: boolean
+  power_save_enabled: boolean
   screen_timeout_s: number
   auto_rotate_s: number
   deep_sleep_enabled: boolean

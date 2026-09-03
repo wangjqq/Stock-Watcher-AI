@@ -28,7 +28,7 @@ const sections = [
         </Paragraph>
         <Paragraph>
           设备管理网页直接运行在设备上（第一阶段无需独立服务器）。设备端支持触摸、旋钮、系统菜单、低功耗休眠、
-          深度睡眠与条件提醒等功能。
+          省电模式、深度睡眠与条件提醒等功能。
         </Paragraph>
       </>
     ),
@@ -158,6 +158,16 @@ const sections = [
         <Paragraph>
           <Text strong>条件提醒：</Text>
           每个提醒对应「接口 + 字段 + 大于/小于阈值」，满足条件时蜂鸣 + LED 告警 + 屏幕横幅。
+        </Paragraph>
+        <Paragraph>
+          <Text strong>省电模式：</Text>
+          在「设备设置」中可手动开启「省电模式」（背光降到最低 + CPU 降频），明显降低耗电；电量低于 20% 时设备也会
+          <Text strong>自动进入</Text>省电模式，电量回升后自动退出。
+        </Paragraph>
+        <Paragraph>
+          <Text strong>低电量保护：</Text>
+          电量低于 5% 时，设备<Text strong>闪烁红光提示后进入深度睡眠保护</Text>（唤醒方式同深度睡眠，RTC 定时唤醒复测电量，
+          充电后自动恢复运行）；<Text strong>未接电池（纯 USB 供电）</Text>时低电量保护不生效，避免误休眠。
         </Paragraph>
         <Paragraph>
           <Text strong>电量与背光：</Text>

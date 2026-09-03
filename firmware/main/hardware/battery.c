@@ -46,7 +46,8 @@ void battery_init(void)
     ESP_LOGI(TAG, "init ok (ADC1_CH%d)", PIN_BATT);
 }
 
-uint8_t battery_get_percent(void)
+/* 读取平滑滤波后的电池电压（V）。未接电池时 ADC 读数为 0，电压约 0V */
+static float battery_voltage(void)
 {
     uint32_t sum = 0;
     int raw;
@@ -64,9 +65,20 @@ uint8_t battery_get_percent(void)
         s_filtered = (s_filtered * 7 + avg) / 8;
     }
 
-    /* ADC(12bit, 0~3.1V@DB12) → 采样电压(mV) → 电池电压(mV) → 电量百分比 */
+    /* ADC(12bit, 0~3.1V@DB12) → 采样电压(mV) → 电池电压(V) */
     float mv = (float)s_filtered / 4095.0f * 3100.0f;
-    float batt = mv / 1000.0f * BATTERY_DIVIDER;
+    return mv / 1000.0f * BATTERY_DIVIDER;
+}
+
+bool battery_present(void)
+{
+    /* 真实电池最低工作电压约 3.0V；明显低于该值视为未接电池（纯 USB 供电） */
+    return battery_voltage() >= 2.5f;
+}
+
+uint8_t battery_get_percent(void)
+{
+    float batt = battery_voltage();
 
     float pct = (batt - BATT_MIN_V) / (BATT_MAX_V - BATT_MIN_V) * 100.0f;
     if (pct < 0.0f) {

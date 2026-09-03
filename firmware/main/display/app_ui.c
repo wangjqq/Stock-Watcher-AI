@@ -257,6 +257,21 @@ static const char *const s_manual_pages[MANUAL_PAGES][MANUAL_LINES] = {
         "Screen-sleep keeps data",
         "   fetching alive",
     },
+    {
+        "== POWER SAVE ==",
+        "Power save: min backlight",
+        "   + CPU down-clock",
+        "   (web settings toggle)",
+        "Battery <20%: auto enter",
+        "   power save mode",
+        "Battery <5%: deep sleep",
+        "   + red LED blink",
+        "Wakes by knob or timer,",
+        "   re-checks battery,",
+        "   resumes when charged",
+        "No battery (USB): the",
+        "   protection is off",
+    },
 };
 
 void app_ui_draw_manual(int page)

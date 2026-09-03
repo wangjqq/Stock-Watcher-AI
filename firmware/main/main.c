@@ -84,6 +84,11 @@ static uint32_t s_screen_timeout_s = 0;    /* 屏幕休眠超时（从 cfg 同�
 static uint32_t s_last_rotate_ms = 0;      /* 上次自动轮播时间戳 */
 static uint32_t s_auto_rotate_s = 0;       /* 自动轮播间隔（从 cfg 同步），0=关闭 */
 
+/* ---- 省电模式 / 低电量保护（运行期状态，不持久化） ---- */
+static bool     s_power_save = false;      /* 省电模式是否生效（手动开关 OR 低电量） */
+static bool     s_low_batt_ps = false;     /* 低电量自动省电锁存（电量回升后清除） */
+static uint32_t s_last_batt_ms = 0;        /* 上次电量采样时间戳 */
+
 /* ---- 深度睡眠（固定时段 + RTC 定时 / 旋钮唤醒） ----
  * 在配置的「入睡 → 唤醒」时间段内、且无操作（屏幕休眠）后，整机进入深度睡眠（<1mA）。
  * 唤醒源：RTC 定时器（到点自动醒）+ 旋钮按下 GPIO7（任意时刻手动醒，兼作确认键）。
@@ -91,23 +96,41 @@ static uint32_t s_auto_rotate_s = 0;       /* 自动轮播间隔（从 cfg 同�
 #define DS_IDLE_FALLBACK_S  300  /* 屏幕休眠关闭时，深度睡眠至少要求的无操作秒数 */
 #define DS_WAKE_GPIO        7    /* 旋钮 SW（按下=低电平），与 knob.c 的 KNOB_GPIO_SW 一致 */
 
+/* ---- 省电模式 / 低电量保护 ----
+ * 省电模式 = 背光最低 + CPU 降频：网页「设备设置」手动开关 OR 电量 <20% 自动进入；
+ * 电量 <5% 进入深度睡眠保护（红光闪烁提示，RTC 定时唤醒复测电量，充电后可自动恢复）。 */
+#define POWER_SAVE_BRIGHTNESS  5    /* 省电模式背光（最低可读亮度） */
+#define NORMAL_MAX_MHZ         240  /* 正常 CPU 频率上限 */
+#define POWER_SAVE_MAX_MHZ     80   /* 省电模式 CPU 频率上限（固定低频） */
+#define LOW_BATT_PS_PCT        20   /* 电量低于此值自动进入省电模式 */
+#define LOW_BATT_DS_PCT        5    /* 电量低于此值进入深度睡眠保护 */
+#define LOW_BATT_CHECK_MS      5000 /* 电量采样周期（低电量保护用） */
+#define LOW_BATT_DS_CHECK_S    600  /* 低电量深睡后定时唤醒复测电量的周期（10 分钟） */
+#define LOW_BATT_DS_BLINKS     5    /* 低电量深睡前红光闪烁次数 */
+
 /* 深度睡眠期间由 RTC 内存保留上一会话所在应用，唤醒后恢复 */
 RTC_DATA_ATTR static uint32_t s_ds_app = 0;
 
 static void wake_screen(void); /* 供 check_alerts 在告警触发时唤醒屏幕 */
 
-/* 电源管理：让 CPU 空闲时自动降频（需 CONFIG_PM_ENABLE，未启用则静默忽略） */
-static void pm_init(void)
+/* 电源管理：让 CPU 空闲时自动降频（需 CONFIG_PM_ENABLE，未启用则静默忽略）。
+ * 运行期可再次调用以切换 CPU 频率上限（省电模式固定低频，退出后恢复）。 */
+static void cpu_freq_set(int max_mhz)
 {
     esp_pm_config_t pm = {
-        .max_freq_mhz = 240,
+        .max_freq_mhz = max_mhz, /* 频率上限：240=正常（空闲降至 80），80=省电固定低频 */
         .min_freq_mhz = 80,
         .light_sleep_enable = false,
     };
     esp_err_t err = esp_pm_configure(&pm);
     if (err != ESP_OK) {
-        ESP_LOGW("pm", "esp_pm not supported (%s), skip", esp_err_to_name(err));
+        ESP_LOGW("pm", "esp_pm configure %dMHz failed (%s), skip", max_mhz, esp_err_to_name(err));
     }
+}
+
+static void pm_init(void)
+{
+    cpu_freq_set(240);
 }
 
 /* 屏幕休眠：熄灭背光（数据拉取 / 告警 / 状态栏逻辑继续，盯盘不中断） */
@@ -121,16 +144,38 @@ static void sleep_screen(void)
     ESP_LOGI("power", "screen sleep");
 }
 
-/* 按键唤醒：恢复背光到当前亮度 */
+/* 当前生效的屏幕亮度：省电模式下固定最低，否则为用户亮度 */
+static uint8_t effective_brightness(void)
+{
+    return s_power_save ? POWER_SAVE_BRIGHTNESS : s_brightness;
+}
+
+/* 按键唤醒：恢复背光到当前亮度（省电模式下为最低亮度） */
 static void wake_screen(void)
 {
     if (!s_screen_asleep) {
         return;
     }
     s_screen_asleep = false;
-    display_set_brightness(s_brightness);
+    display_set_brightness(effective_brightness());
     s_force_redraw = true;
     ESP_LOGI("power", "screen wake");
+}
+
+/* ---- 省电模式（背光最低 + CPU 降频） ----
+ * 触发来源：网页「设备设置」手动开关 OR 低电量保护（电量 <20% 自动进入）。
+ * 仅在状态变化时动作；退出时恢复用户亮度与正常频率。 */
+static void power_save_apply(bool active)
+{
+    if (s_power_save == active) {
+        return;
+    }
+    s_power_save = active;
+    cpu_freq_set(active ? POWER_SAVE_MAX_MHZ : NORMAL_MAX_MHZ);
+    display_set_brightness(s_screen_asleep ? 0 : effective_brightness());
+    ESP_LOGI("power", "power save %s (brightness=%u, cpu=%dMHz)",
+             active ? "on" : "off", effective_brightness(),
+             active ? POWER_SAVE_MAX_MHZ : NORMAL_MAX_MHZ);
 }
 
 /* 当前时刻（分钟 0-1439）是否落在睡眠窗口内。
@@ -191,6 +236,33 @@ static void deep_sleep_enter(const app_config_t *cfg)
 
     esp_deep_sleep_start(); /* 成功则不返回 */
     ESP_LOGE("ds", "deep sleep start failed");
+}
+
+/* 低电量深度睡眠保护（电量 <5%）：红光闪烁提示后整机休眠。
+ * 深睡期间 CPU/PWM 停摆无法持续闪烁，故先在屏幕上闪烁红光数下作为提示。
+ * 唤醒源：旋钮按下（GPIO7）+ 周期定时器（复测电量，充电后可自动恢复运行）。 */
+static void low_batt_deep_sleep(void)
+{
+    ESP_LOGW("batt", "battery < %d%%, deep sleep to protect", LOW_BATT_DS_PCT);
+
+    for (int i = 0; i < LOW_BATT_DS_BLINKS; i++) {
+        led_set_color(255, 0, 0);
+        vTaskDelay(pdMS_TO_TICKS(200));
+        led_off();
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+
+    wifi_manager_disconnect(); /* 断开网络，减少睡眠过渡期耗电 */
+
+    gpio_set_direction(DS_WAKE_GPIO, GPIO_MODE_INPUT);
+    gpio_pullup_en(DS_WAKE_GPIO);
+    if (esp_sleep_enable_ext1_wakeup_io(1ULL << DS_WAKE_GPIO, ESP_EXT1_WAKEUP_ANY_LOW) != ESP_OK) {
+        ESP_LOGW("batt", "gpio wakeup enable failed");
+    }
+    esp_sleep_enable_timer_wakeup((uint64_t)LOW_BATT_DS_CHECK_S * 1000000ULL);
+
+    esp_deep_sleep_start(); /* 成功则不返回 */
+    ESP_LOGE("batt", "deep sleep start failed");
 }
 
 /* 环境光照度 → 屏幕亮度（0-100）：亮环境更亮，暗环境更暗，留最低 10% 保证可读 */
@@ -269,14 +341,15 @@ static void key_feedback(void)
 
 static void apply_brightness(void)
 {
-    display_set_brightness(s_brightness);
+    display_set_brightness(effective_brightness());
     s_brightness_dirty = true;
 }
 
-/* 只更新硬件亮度，不写回 NVS（自动亮度用，避免频繁写 Flash） */
+/* 只更新硬件亮度，不写回 NVS（自动亮度用，避免频繁写 Flash）。
+ * 省电模式下保持最低亮度，不随光照度变化。 */
 static void apply_brightness_hw(void)
 {
-    display_set_brightness(s_brightness);
+    display_set_brightness(effective_brightness());
 }
 
 /* --- 应用列表菜单：旋转移动光标，OK 打开，BACK 无操作 --- */
@@ -779,6 +852,26 @@ void app_main(void)
         }
 
         uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+
+        /* 电量采样（低电量保护）：每 5 秒一次。未接电池（纯 USB 供电）不启用低电量保护，
+         * 避免 ADC 读数接近 0 时误触发深度睡眠。 */
+        if (now_ms - s_last_batt_ms >= LOW_BATT_CHECK_MS) {
+            s_last_batt_ms = now_ms;
+            if (battery_present()) {
+                uint8_t batt = battery_get_percent();
+                if (batt < LOW_BATT_DS_PCT) {
+                    low_batt_deep_sleep(); /* 低电量深度睡眠保护，不返回 */
+                } else if (batt < LOW_BATT_PS_PCT) {
+                    s_low_batt_ps = true;  /* 电量 <20%：自动进入省电模式 */
+                } else {
+                    s_low_batt_ps = false; /* 电量回升，退出低电量省电 */
+                }
+            } else {
+                s_low_batt_ps = false;
+            }
+        }
+        /* 省电模式：网页「设备设置」手动开关即时生效 + 低电量自动进入 */
+        power_save_apply(cfg.power_save_enabled || s_low_batt_ps);
 
         /* 屏幕休眠：无操作超时熄灭背光（0=关闭）。数据拉取/告警继续，盯盘不中断 */
         if (s_screen_timeout_s > 0 && !s_screen_asleep &&
