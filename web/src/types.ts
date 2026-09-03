@@ -58,6 +58,11 @@ export interface AppConfig {
   auto_brightness: boolean
   screen_timeout_s: number
   auto_rotate_s: number
+  deep_sleep_enabled: boolean
+  deep_sleep_start_hh: number
+  deep_sleep_start_mm: number
+  deep_sleep_end_hh: number
+  deep_sleep_end_mm: number
   buzzer_enabled: boolean
   buzzer_volume: number
   interfaces: DataInterface[]

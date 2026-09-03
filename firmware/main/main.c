@@ -1,10 +1,14 @@
 #include <stdbool.h>
 #include <string.h>
+#include <time.h>
 
+#include "esp_attr.h"
 #include "esp_log.h"
 #include "esp_partition.h"
 #include "esp_pm.h"
+#include "esp_sleep.h"
 #include "esp_timer.h"
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
@@ -80,6 +84,16 @@ static uint32_t s_screen_timeout_s = 0;    /* 屏幕休眠超时（从 cfg 同�
 static uint32_t s_last_rotate_ms = 0;      /* 上次自动轮播时间戳 */
 static uint32_t s_auto_rotate_s = 0;       /* 自动轮播间隔（从 cfg 同步），0=关闭 */
 
+/* ---- 深度睡眠（固定时段 + RTC 定时 / 旋钮唤醒） ----
+ * 在配置的「入睡 → 唤醒」时间段内、且无操作（屏幕休眠）后，整机进入深度睡眠（<1mA）。
+ * 唤醒源：RTC 定时器（到点自动醒）+ 旋钮按下 GPIO7（任意时刻手动醒，兼作确认键）。
+ * 唤醒后重新走 app_main，联网 SNTP 校时后继续正常盯盘。 */
+#define DS_IDLE_FALLBACK_S  300  /* 屏幕休眠关闭时，深度睡眠至少要求的无操作秒数 */
+#define DS_WAKE_GPIO        7    /* 旋钮 SW（按下=低电平），与 knob.c 的 KNOB_GPIO_SW 一致 */
+
+/* 深度睡眠期间由 RTC 内存保留上一会话所在应用，唤醒后恢复 */
+RTC_DATA_ATTR static uint32_t s_ds_app = 0;
+
 static void wake_screen(void); /* 供 check_alerts 在告警触发时唤醒屏幕 */
 
 /* 电源管理：让 CPU 空闲时自动降频（需 CONFIG_PM_ENABLE，未启用则静默忽略） */
@@ -117,6 +131,66 @@ static void wake_screen(void)
     display_set_brightness(s_brightness);
     s_force_redraw = true;
     ESP_LOGI("power", "screen wake");
+}
+
+/* 当前时刻（分钟 0-1439）是否落在睡眠窗口内。
+ * start==end 视为未配置（永不入睡）；start > end 表示跨午夜（如 22:00 → 08:00）。 */
+static bool deep_sleep_in_window(const app_config_t *cfg, int cur_min)
+{
+    int start = cfg->deep_sleep_start_hh * 60 + cfg->deep_sleep_start_mm;
+    int end   = cfg->deep_sleep_end_hh   * 60 + cfg->deep_sleep_end_mm;
+    if (start == end) {
+        return false;
+    }
+    if (start < end) {
+        return cur_min >= start && cur_min < end;
+    }
+    return cur_min >= start || cur_min < end;
+}
+
+/* 距下一次「唤醒时刻」的剩余秒数（RTC 定时器时长；今日唤醒点已过则顺延到明天同一时刻） */
+static uint32_t deep_sleep_remaining_s(const app_config_t *cfg, time_t now)
+{
+    struct tm tmv;
+    localtime_r(&now, &tmv);
+    tmv.tm_hour = cfg->deep_sleep_end_hh;
+    tmv.tm_min  = cfg->deep_sleep_end_mm;
+    tmv.tm_sec  = 0;
+    time_t end = mktime(&tmv);
+    if (end <= now) {
+        end += 86400;
+    }
+    return (uint32_t)(end - now);
+}
+
+/* 进入深度睡眠：保存现场 → 断开网络 → 使能 RTC 定时 + GPIO7 唤醒 → 入睡（成功则不返回） */
+static void deep_sleep_enter(const app_config_t *cfg)
+{
+    time_t now = time(NULL);
+    if (now <= 1700000000) {
+        return; /* 时间未同步，无法计时，放弃 */
+    }
+    uint32_t remain_s = deep_sleep_remaining_s(cfg, now);
+    if (remain_s == 0) {
+        return;
+    }
+
+    s_ds_app = s_current_app; /* RTC 内存保存会话应用，唤醒后恢复 */
+    ESP_LOGI("ds", "deep sleep: wake in %us or GPIO%d", remain_s, DS_WAKE_GPIO);
+
+    wifi_manager_disconnect(); /* 断开网络，减少睡眠过渡期耗电 */
+
+    /* 旋钮按下（低电平，内部上拉）随时可唤醒；GPIO7 在 ESP32-S3 属 RTC 域（GPIO0~21），
+     * 深睡时经 EXT1 唤醒（IDF6 已用 esp_sleep_enable_ext1_wakeup_io 取代旧的 GPIO 唤醒接口） */
+    gpio_set_direction(DS_WAKE_GPIO, GPIO_MODE_INPUT);
+    gpio_pullup_en(DS_WAKE_GPIO);
+    if (esp_sleep_enable_ext1_wakeup_io(1ULL << DS_WAKE_GPIO, ESP_EXT1_WAKEUP_ANY_LOW) != ESP_OK) {
+        ESP_LOGW("ds", "gpio wakeup enable failed");
+    }
+    esp_sleep_enable_timer_wakeup((uint64_t)remain_s * 1000000ULL);
+
+    esp_deep_sleep_start(); /* 成功则不返回 */
+    ESP_LOGE("ds", "deep sleep start failed");
 }
 
 /* 环境光照度 → 屏幕亮度（0-100）：亮环境更亮，暗环境更暗，留最低 10% 保证可读 */
@@ -626,10 +700,18 @@ void app_main(void)
     static app_config_t cfg;
     config_load(&cfg);
 
-    /* 界面会话初始状态：亮度取配置，开机默认进入第一个应用 */
+    /* 深度睡眠唤醒（RTC 定时 / 旋钮按下=EXT1）：恢复会话应用，并跳过开机自检 */
+    esp_sleep_wakeup_cause_t wake_cause = esp_sleep_get_wakeup_cause();
+    bool from_deep_sleep = (wake_cause == ESP_SLEEP_WAKEUP_TIMER ||
+                            wake_cause == ESP_SLEEP_WAKEUP_EXT1);
+    if (from_deep_sleep) {
+        ESP_LOGI("ds", "wake from deep sleep, cause=%d", (int)wake_cause);
+    }
+
+    /* 界面会话初始状态：亮度取配置，开机默认进入第一个应用（深睡唤醒恢复原应用） */
     s_brightness = cfg.brightness;
     s_ui = UI_APP;
-    s_current_app = 0;
+    s_current_app = from_deep_sleep ? s_ds_app : 0;
     s_cursor = 0;
     s_force_redraw = true; /* 首次循环立即绘制画布 */
 
@@ -647,8 +729,10 @@ void app_main(void)
     http_server_start();
     pm_init(); /* CPU 空闲自动降频（需 CONFIG_PM_ENABLE） */
 
-    /* 上电硬件自检：LED 变色 + 蜂鸣（可经 selftest.h 关闭） */
-    hw_selftest_run();
+    /* 上电硬件自检：LED 变色 + 蜂鸣（可经 selftest.h 关闭）；深睡唤醒跳过，避免吵醒用户 */
+    if (!from_deep_sleep) {
+        hw_selftest_run();
+    }
 
     /* 输入统一走这里：按当前界面状态（菜单 / 应用 / 系统）分发 */
     knob_set_handler(on_input);
@@ -700,6 +784,23 @@ void app_main(void)
         if (s_screen_timeout_s > 0 && !s_screen_asleep &&
                 now_ms - s_last_activity_ms >= s_screen_timeout_s * 1000UL) {
             sleep_screen();
+        }
+
+        /* 深度睡眠：固定时段 + 无操作后整机入睡（RTC 定时 + 旋钮按下唤醒）。
+         * 无操作依据 = 屏幕休眠超时；若屏幕休眠关闭则退化为固定空闲时长。 */
+        if (cfg.deep_sleep_enabled) {
+            uint32_t idle_s = s_screen_timeout_s > 0 ? s_screen_timeout_s : DS_IDLE_FALLBACK_S;
+            if ((uint32_t)(now_ms - s_last_activity_ms) >= idle_s * 1000UL) {
+                time_t ds_now = time(NULL);
+                if (ds_now > 1700000000) {
+                    struct tm tmv;
+                    localtime_r(&ds_now, &tmv);
+                    int cur_min = tmv.tm_hour * 60 + tmv.tm_min;
+                    if (deep_sleep_in_window(&cfg, cur_min)) {
+                        deep_sleep_enter(&cfg);
+                    }
+                }
+            }
         }
 
         /* 自动轮播：应用内每隔 N 秒自动切换到下一个用户应用（0=关闭）。

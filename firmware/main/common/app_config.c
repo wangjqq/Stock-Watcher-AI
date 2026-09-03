@@ -17,6 +17,12 @@ void config_defaults(app_config_t *cfg)
     cfg->auto_brightness = false;
     cfg->buzzer_enabled = true;
     cfg->buzzer_volume = 70;
+    /* 深度睡眠：默认关闭；开启时默认夜间 22:00 入睡、次日 08:00 唤醒 */
+    cfg->deep_sleep_enabled = false;
+    cfg->deep_sleep_start_hh = 22;
+    cfg->deep_sleep_start_mm = 0;
+    cfg->deep_sleep_end_hh = 8;
+    cfg->deep_sleep_end_mm = 0;
     cfg->interface_count = 0;
     /* 默认一个空应用「盯盘」，保证开机有可进入的第一个应用 */
     cfg->app_count = 1;
@@ -138,6 +144,11 @@ char *config_to_json(const app_config_t *cfg)
     cJSON_AddBoolToObject(root, "auto_brightness", cfg->auto_brightness);
     cJSON_AddNumberToObject(root, "screen_timeout_s", cfg->screen_timeout_s);
     cJSON_AddNumberToObject(root, "auto_rotate_s", cfg->auto_rotate_s);
+    cJSON_AddBoolToObject(root, "deep_sleep_enabled", cfg->deep_sleep_enabled);
+    cJSON_AddNumberToObject(root, "deep_sleep_start_hh", cfg->deep_sleep_start_hh);
+    cJSON_AddNumberToObject(root, "deep_sleep_start_mm", cfg->deep_sleep_start_mm);
+    cJSON_AddNumberToObject(root, "deep_sleep_end_hh", cfg->deep_sleep_end_hh);
+    cJSON_AddNumberToObject(root, "deep_sleep_end_mm", cfg->deep_sleep_end_mm);
     cJSON_AddBoolToObject(root, "buzzer_enabled", cfg->buzzer_enabled);
     cJSON_AddNumberToObject(root, "buzzer_volume", cfg->buzzer_volume);
 
@@ -276,6 +287,27 @@ esp_err_t config_from_json(const char *json, app_config_t *cfg)
     v = cJSON_GetObjectItem(root, "auto_rotate_s");
     if (cJSON_IsNumber(v) && v->valueint >= 0) {
         cfg->auto_rotate_s = (uint32_t)v->valueint;
+    }
+
+    v = cJSON_GetObjectItem(root, "deep_sleep_enabled");
+    if (cJSON_IsBool(v)) {
+        cfg->deep_sleep_enabled = cJSON_IsTrue(v);
+    }
+    v = cJSON_GetObjectItem(root, "deep_sleep_start_hh");
+    if (cJSON_IsNumber(v) && v->valueint >= 0 && v->valueint <= 23) {
+        cfg->deep_sleep_start_hh = (uint8_t)v->valueint;
+    }
+    v = cJSON_GetObjectItem(root, "deep_sleep_start_mm");
+    if (cJSON_IsNumber(v) && v->valueint >= 0 && v->valueint <= 59) {
+        cfg->deep_sleep_start_mm = (uint8_t)v->valueint;
+    }
+    v = cJSON_GetObjectItem(root, "deep_sleep_end_hh");
+    if (cJSON_IsNumber(v) && v->valueint >= 0 && v->valueint <= 23) {
+        cfg->deep_sleep_end_hh = (uint8_t)v->valueint;
+    }
+    v = cJSON_GetObjectItem(root, "deep_sleep_end_mm");
+    if (cJSON_IsNumber(v) && v->valueint >= 0 && v->valueint <= 59) {
+        cfg->deep_sleep_end_mm = (uint8_t)v->valueint;
     }
 
     v = cJSON_GetObjectItem(root, "buzzer_enabled");

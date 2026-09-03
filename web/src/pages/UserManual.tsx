@@ -27,8 +27,8 @@ const sections = [
           用户提供数据接口 → 系统自动解析数据 → 用户选择需要的数据 → 用户布局屏幕显示 → 设备自动获取并显示。
         </Paragraph>
         <Paragraph>
-          设备管理网页直接运行在设备上（第一阶段无需独立服务器）。设备端支持触摸、旋钮、系统菜单、低功耗休眠与
-          条件提醒等功能。
+          设备管理网页直接运行在设备上（第一阶段无需独立服务器）。设备端支持触摸、旋钮、系统菜单、低功耗休眠、
+          深度睡眠与条件提醒等功能。
         </Paragraph>
       </>
     ),
@@ -69,8 +69,8 @@ const sections = [
       <>
         <Paragraph>
           <Text strong>设备设置：</Text>
-          设备名称、Wi-Fi（SSID/密码）、屏幕亮度、自动亮度（光敏）、屏幕休眠、自动轮播、蜂鸣器与音量；支持配置
-          <Text strong> 导出 / 导入 / 重置</Text>。
+          设备名称、Wi-Fi（SSID/密码）、屏幕亮度、自动亮度（光敏）、屏幕休眠、自动轮播、<Text strong>深度睡眠
+          （固定时段）</Text>、蜂鸣器与音量；支持配置<Text strong> 导出 / 导入 / 重置</Text>。
         </Paragraph>
         <Paragraph>
           <Text strong>接口配置：</Text>
@@ -143,6 +143,13 @@ const sections = [
         <Paragraph>
           <Text strong>屏幕休眠：</Text>
           无操作超过设定时间自动熄灭背光（数据拉取、告警、状态栏继续运行），任何按键/触摸或告警触发可唤醒。
+        </Paragraph>
+        <Paragraph>
+          <Text strong>深度睡眠（固定时段）：</Text>
+          在「设备设置」中可配置「入睡 / 唤醒」时间（支持跨天，如 22:00 → 08:00）。到点且屏幕已休眠后，
+          整机进入深度睡眠（<Text strong>耗电 &lt;1mA</Text>，数据与告警随之暂停）；RTC 定时器到唤醒时刻自动醒来，
+          或随时按下<Text strong>旋钮（GPIO7）</Text>手动唤醒，唤醒后自动联网校时并恢复原应用继续盯盘。
+          需联网校时成功且开启屏幕休眠（或至少无操作一段时间）才会进入。
         </Paragraph>
         <Paragraph>
           <Text strong>自动轮播：</Text>

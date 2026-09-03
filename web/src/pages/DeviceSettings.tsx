@@ -13,6 +13,11 @@ interface FormValues {
   screen_sleep_s: number
   auto_rotate_enabled: boolean
   auto_rotate_s: number
+  deep_sleep_enabled: boolean
+  deep_sleep_start_hh: number
+  deep_sleep_start_mm: number
+  deep_sleep_end_hh: number
+  deep_sleep_end_mm: number
   buzzer_enabled: boolean
   buzzer_volume: number
 }
@@ -26,6 +31,7 @@ export default function DeviceSettings() {
   const autoBrightness = Form.useWatch('auto_brightness', form)
   const screenSleep = Form.useWatch('screen_sleep_enabled', form)
   const autoRotate = Form.useWatch('auto_rotate_enabled', form)
+  const deepSleep = Form.useWatch('deep_sleep_enabled', form)
   const buzzerEnabled = Form.useWatch('buzzer_enabled', form)
 
   const fillForm = (cfg: AppConfig) =>
@@ -39,6 +45,11 @@ export default function DeviceSettings() {
       screen_sleep_s: cfg.screen_timeout_s || 60,
       auto_rotate_enabled: (cfg.auto_rotate_s ?? 0) > 0,
       auto_rotate_s: cfg.auto_rotate_s || 10,
+      deep_sleep_enabled: cfg.deep_sleep_enabled,
+      deep_sleep_start_hh: cfg.deep_sleep_start_hh ?? 22,
+      deep_sleep_start_mm: cfg.deep_sleep_start_mm ?? 0,
+      deep_sleep_end_hh: cfg.deep_sleep_end_hh ?? 8,
+      deep_sleep_end_mm: cfg.deep_sleep_end_mm ?? 0,
       buzzer_enabled: cfg.buzzer_enabled,
       buzzer_volume: cfg.buzzer_volume,
     })
@@ -65,6 +76,11 @@ export default function DeviceSettings() {
         auto_brightness: values.auto_brightness,
         screen_timeout_s: values.screen_sleep_enabled ? Math.max(1, values.screen_sleep_s) : 0,
         auto_rotate_s: values.auto_rotate_enabled ? Math.max(1, values.auto_rotate_s) : 0,
+        deep_sleep_enabled: values.deep_sleep_enabled,
+        deep_sleep_start_hh: values.deep_sleep_start_hh,
+        deep_sleep_start_mm: values.deep_sleep_start_mm,
+        deep_sleep_end_hh: values.deep_sleep_end_hh,
+        deep_sleep_end_mm: values.deep_sleep_end_mm,
         buzzer_enabled: values.buzzer_enabled,
         buzzer_volume: values.buzzer_volume,
       })
@@ -169,6 +185,34 @@ export default function DeviceSettings() {
             <Form.Item name="auto_rotate_s" noStyle>
               <InputNumber min={1} max={3600} addonAfter="秒" disabled={!autoRotate} />
             </Form.Item>
+          </Space>
+        </Form.Item>
+
+        <Form.Item label="深度睡眠（固定时段整机休眠 <1mA，RTC 定时 + 旋钮按下唤醒）">
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Form.Item name="deep_sleep_enabled" valuePropName="checked" noStyle>
+              <Switch />
+            </Form.Item>
+            {deepSleep && (
+              <Space wrap>
+                <span>入睡</span>
+                <Form.Item name="deep_sleep_start_hh" noStyle>
+                  <InputNumber min={0} max={23} style={{ width: 64 }} placeholder="时" />
+                </Form.Item>
+                <span>:</span>
+                <Form.Item name="deep_sleep_start_mm" noStyle>
+                  <InputNumber min={0} max={59} style={{ width: 64 }} placeholder="分" />
+                </Form.Item>
+                <span>唤醒</span>
+                <Form.Item name="deep_sleep_end_hh" noStyle>
+                  <InputNumber min={0} max={23} style={{ width: 64 }} placeholder="时" />
+                </Form.Item>
+                <span>:</span>
+                <Form.Item name="deep_sleep_end_mm" noStyle>
+                  <InputNumber min={0} max={59} style={{ width: 64 }} placeholder="分" />
+                </Form.Item>
+              </Space>
+            )}
           </Space>
         </Form.Item>
 
